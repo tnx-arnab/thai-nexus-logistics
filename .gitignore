@@ -1,0 +1,11 @@
+# WordPress/Plugin ignore
+node_modules/
+dist/
+.DS_Store
+*.log
+.gemini/
+brain/
+implementation_plan.md
+task.md
+walkthrough.md
+test_currency.php
