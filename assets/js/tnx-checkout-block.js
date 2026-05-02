@@ -48,8 +48,6 @@
                 shippingRates: tnxShippingFilter,
             } );
         }
-
-
     };
 
     // Use wp.domReady if available, otherwise DOMContentLoaded

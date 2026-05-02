@@ -38,9 +38,7 @@ class TNX_API {
             'api_token' => $this->get_token(),
         ), $data);
 
-        $start_time = microtime(true);
         $result = $this->request($endpoint, $payload);
-        $duration = round(microtime(true) - $start_time, 2);
 
 
         if (!is_wp_error($result)) {

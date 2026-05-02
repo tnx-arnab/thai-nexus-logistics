@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Package, LayoutDashboard, Save, ExternalLink, RefreshCw } from 'lucide-react';
+import { Settings, Package, LayoutDashboard, Save, ExternalLink, RefreshCw, DollarSign } from 'lucide-react';
 import SettingsPage from './pages/SettingsPage';
 import ShipmentsPage from './pages/ShipmentsPage';
+import CommissionRulesPage from './pages/CommissionRulesPage';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -50,12 +51,26 @@ const App = () => {
             <Settings size={18} />
             Settings
           </button>
+          <button
+            onClick={() => setActiveTab('commission')}
+            className={cn(
+              "flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all",
+              activeTab === 'commission' 
+                ? "bg-secondary text-white shadow-md" 
+                : "text-gray-600 hover:bg-gray-50"
+            )}
+          >
+            <DollarSign size={18} />
+            Fees
+          </button>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-        {activeTab === 'shipments' ? <ShipmentsPage /> : <SettingsPage />}
+        {activeTab === 'shipments' && <ShipmentsPage />}
+        {activeTab === 'settings' && <SettingsPage />}
+        {activeTab === 'commission' && <CommissionRulesPage />}
       </main>
 
       {/* Footer */}

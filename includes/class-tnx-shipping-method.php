@@ -86,10 +86,7 @@ class TNX_Shipping_Method extends WC_Shipping_Method {
             $max_height = max($max_height, $height);
         }
 
-        $api = TNX_API::get_instance();
-        $dest = $package['destination'];
-        
-        $response = $api->get_quote(array(
+        $response = TNX_API::get_instance()->get_quote(array(
             'country'           => $dest['country'],
             'state'             => $dest['state'],
             'postcode'          => $dest['postcode'],
@@ -108,6 +105,7 @@ class TNX_Shipping_Method extends WC_Shipping_Method {
         if (isset($response['quotes']) && is_array($response['quotes'])) {
             $target_currency = get_woocommerce_currency();
             $rate = TNX_Currency::get_instance()->get_rate('THB', $target_currency);
+            $commission = TNX_Commission::get_instance()->get_total_commission();
 
             foreach ($response['quotes'] as $quote) {
                 // Add destination hash to ID to force WooCommerce to refresh rates when address changes
@@ -118,12 +116,20 @@ class TNX_Shipping_Method extends WC_Shipping_Method {
                     $cost = $cost * $rate;
                 }
 
+                // Add hidden commission buffer
+                $cost += $commission;
+
                 $this->add_rate(array(
                     'id'    => $rate_id,
                     'label' => $quote['display_name'] . ' (' . ($quote['estimated_days'] ?: 'TBA') . ' days)',
                     'cost'  => $cost,
                     'meta_data' => array(
                         'tnx_courier' => $quote['courier_name'],
+                        'tnx_breakdown' => array(
+                            'base_price' => $cost - $commission,
+                            'commission' => $commission,
+                            'total'      => $cost
+                        )
                     )
                 ));
             }

@@ -40,6 +40,12 @@ class TNX_REST_API {
             'permission_callback' => array($this, 'check_permission'),
         ));
 
+        register_rest_route('tnx/v1', '/search-products', array(
+            'methods'             => 'GET',
+            'callback'            => array($this, 'search_products'),
+            'permission_callback' => array($this, 'check_permission'),
+        ));
+
         register_rest_route('tnx/v1', '/shipments/(?P<request_number>[a-zA-Z0-9-]+)', array(
             'methods'             => 'GET',
             'callback'            => array($this, 'get_shipment_details'),
@@ -54,6 +60,8 @@ class TNX_REST_API {
     public function get_settings() {
         return array(
             'api_token' => get_option('tnx_api_token', ''),
+            'commission_rules' => get_option('tnx_commission_rules', array()),
+            'currency_symbol' => html_entity_decode(get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8'),
             'shipper'   => array(
                 'name'        => get_option('tnx_shipper_name', ''),
                 'phone'       => get_option('tnx_shipper_phone', ''),
@@ -82,6 +90,25 @@ class TNX_REST_API {
             update_option('tnx_shipper_state', sanitize_text_field(isset($shipper['state']) ? $shipper['state'] : ''));
             update_option('tnx_shipper_postal_code', sanitize_text_field(isset($shipper['postal_code']) ? $shipper['postal_code'] : ''));
             update_option('tnx_shipper_country', sanitize_text_field($shipper['country']));
+        }
+
+        if (isset($params['commission_rules'])) {
+            // Need custom sanitization for an array of rules
+            $rules = array();
+            if (is_array($params['commission_rules'])) {
+                foreach ($params['commission_rules'] as $rule) {
+                    $rules[] = array(
+                        'condition_type'    => sanitize_text_field($rule['condition_type'] ?? ''),
+                        'min_range'         => floatval($rule['min_range'] ?? 0),
+                        'max_range'         => floatval($rule['max_range'] ?? 0),
+                        'specific_products' => array_map('intval', (array)($rule['specific_products'] ?? array())),
+                        'fee_type'          => sanitize_text_field($rule['fee_type'] ?? 'fixed'),
+                        'fee_value'         => floatval($rule['fee_value'] ?? 0),
+                        'fee_label'         => sanitize_text_field($rule['fee_label'] ?? ''),
+                    );
+                }
+            }
+            update_option('tnx_commission_rules', $rules);
         }
 
         return rest_ensure_response(array('success' => true));
@@ -118,5 +145,32 @@ class TNX_REST_API {
 
         // Return the 'data' part which contains the shipment entity
         return rest_ensure_response(isset($response['data']) ? $response['data'] : $response);
+    }
+
+    public function search_products($request) {
+        $search = $request->get_param('search');
+        $args = array(
+            'post_type'      => 'product',
+            'post_status'    => 'publish',
+            'posts_per_page' => 20,
+            's'              => sanitize_text_field($search),
+        );
+        $query = new WP_Query($args);
+        $products = array();
+        
+        if ($query->have_posts()) {
+            foreach ($query->posts as $post) {
+                $product = wc_get_product($post->ID);
+                if ($product) {
+                    $products[] = array(
+                        'id'   => $product->get_id(),
+                        'name' => $product->get_name(),
+                        'sku'  => $product->get_sku(),
+                    );
+                }
+            }
+        }
+        
+        return rest_ensure_response($products);
     }
 }

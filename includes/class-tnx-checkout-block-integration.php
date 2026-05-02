@@ -29,7 +29,7 @@ class TNX_Checkout_Block_Integration implements IntegrationInterface {
         wp_register_script(
             'tnx-checkout-block-js',
             $script_url,
-            array('wc-blocks-checkout', 'wp-data', 'wp-hooks'),
+            array('wc-blocks-checkout', 'wp-data', 'wp-hooks', 'wc-settings'),
             filemtime($script_file),
             true
         );

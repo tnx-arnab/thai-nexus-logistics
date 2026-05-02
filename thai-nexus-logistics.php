@@ -61,6 +61,7 @@ class Thai_Nexus_Logistics {
         require_once TNX_PLUGIN_DIR . 'includes/class-tnx-product.php';
         require_once TNX_PLUGIN_DIR . 'includes/class-tnx-shipping-method.php';
         require_once TNX_PLUGIN_DIR . 'includes/class-tnx-order.php';
+        require_once TNX_PLUGIN_DIR . 'includes/class-tnx-commission.php';
 
         // Initialize Classes
         TNX_API::get_instance();
@@ -69,6 +70,7 @@ class Thai_Nexus_Logistics {
         TNX_Product::get_instance();
         TNX_Order::get_instance();
         TNX_Currency::get_instance();
+        TNX_Commission::get_instance();
 
         // Register Shipping Method
         add_filter('woocommerce_shipping_methods', array($this, 'register_shipping_method'));
@@ -199,26 +201,23 @@ class Thai_Nexus_Logistics {
         add_action('woocommerce_register_main_checkout_block_integration', function($integration_registry) {
             $integration_registry->register(new TNX_Checkout_Block_Integration());
         });
+
+        // Expose commission breakdown to Store API (Checkout Blocks)
+        add_filter('woocommerce_store_api_cart_extensions', function($extensions) {
+            $extensions['tnx-shipping'] = array(
+                'commission' => TNX_Commission::get_instance()->get_total_commission(),
+            );
+            return $extensions;
+        });
     }
 
     /**
      * Fail-safe script enqueuing for the Checkout Block
      */
     public function enqueue_block_scripts() {
-        if (is_checkout() || is_cart()) {
-            $script_url  = plugins_url('assets/js/tnx-checkout-block.js', __FILE__);
-            $script_file = TNX_PLUGIN_DIR . 'assets/js/tnx-checkout-block.js';
-            
-            if (file_exists($script_file)) {
-                wp_enqueue_script(
-                    'tnx-checkout-block-js',
-                    $script_url,
-                    array('wp-data', 'wp-hooks'),
-                    filemtime($script_file),
-                    true
-                );
-            }
-        }
+        // Enqueueing is handled by TNX_Checkout_Block_Integration for Checkout Blocks.
+        // For classic checkout, we could enqueue a separate script if needed, 
+        // but for now, we'll avoid duplicate registration warnings.
     }
 
     public function register_shipping_method($methods) {
