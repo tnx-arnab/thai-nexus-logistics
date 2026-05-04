@@ -157,6 +157,8 @@ class TNX_Box_Packer {
      */
     public function pack_items($items) {
         $result = new TNX_Packing_Result();
+        $box_definitions = get_option('tnx_box_definitions', []);
+
         $validation_result = $this->validate_items($items);
         if ($validation_result->has_errors()) {
             return $validation_result;

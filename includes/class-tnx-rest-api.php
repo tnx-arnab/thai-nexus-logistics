@@ -74,7 +74,6 @@ class TNX_REST_API {
         return array(
             'api_token' => get_option('tnx_api_token', ''),
             'commission_rules' => get_option('tnx_commission_rules', array()),
-            'box_packing_enabled' => get_option('tnx_box_packing_enabled', 'no') === 'yes',
             'currency_symbol' => html_entity_decode(get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8'),
             'shipper'   => array(
                 'name'        => get_option('tnx_shipper_name', ''),
@@ -93,10 +92,6 @@ class TNX_REST_API {
 
         if (isset($params['api_token'])) {
             update_option('tnx_api_token', sanitize_text_field($params['api_token']));
-        }
-
-        if (isset($params['box_packing_enabled'])) {
-            update_option('tnx_box_packing_enabled', $params['box_packing_enabled'] ? 'yes' : 'no');
         }
 
         if (isset($params['shipper'])) {
