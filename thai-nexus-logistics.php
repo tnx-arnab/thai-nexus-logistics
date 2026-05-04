@@ -2,8 +2,8 @@
 /**
  * Plugin Name: Thai Nexus Logistics
  * Description: Real-time shipping quotations and automated shipment creation via Thai Nexus API.
- * Version: 1.0.0
- * Author: Antigravity
+ * Version: 1.5.0
+ * Author: Thai Nexus Logistics
  * Text Domain: thai-nexus-logistics
  * Requires at least: 5.8
  * Requires PHP: 7.4
@@ -15,6 +15,13 @@ if (!defined('ABSPATH')) exit;
 define('TNX_VERSION', '1.0.0');
 define('TNX_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('TNX_PLUGIN_URL', plugin_dir_url(__FILE__));
+
+// Load Composer Autoloader
+if (file_exists(TNX_PLUGIN_DIR . 'vendor/autoload.php')) {
+    require_once TNX_PLUGIN_DIR . 'vendor/autoload.php';
+}
+
+error_log("TNX Plugin Booting: " . date('Y-m-d H:i:s'));
 
 /**
  * Main Plugin Class
@@ -59,6 +66,7 @@ class Thai_Nexus_Logistics {
 
         // Load WooCommerce dependent files
         require_once TNX_PLUGIN_DIR . 'includes/class-tnx-product.php';
+        require_once TNX_PLUGIN_DIR . 'includes/class-tnx-box-packer.php';
         require_once TNX_PLUGIN_DIR . 'includes/class-tnx-shipping-method.php';
         require_once TNX_PLUGIN_DIR . 'includes/class-tnx-order.php';
         require_once TNX_PLUGIN_DIR . 'includes/class-tnx-commission.php';
@@ -68,6 +76,7 @@ class Thai_Nexus_Logistics {
         TNX_Admin::get_instance();
         TNX_REST_API::get_instance();
         TNX_Product::get_instance();
+        TNX_Box_Packer::get_instance();
         TNX_Order::get_instance();
         TNX_Currency::get_instance();
         TNX_Commission::get_instance();

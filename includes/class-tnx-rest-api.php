@@ -34,6 +34,19 @@ class TNX_REST_API {
             ),
         ));
 
+        register_rest_route('tnx/v1', '/box-definitions', array(
+            array(
+                'methods'             => 'GET',
+                'callback'            => array($this, 'get_box_definitions'),
+                'permission_callback' => array($this, 'check_permission'),
+            ),
+            array(
+                'methods'             => 'POST',
+                'callback'            => array($this, 'save_box_definitions'),
+                'permission_callback' => array($this, 'check_permission'),
+            ),
+        ));
+
         register_rest_route('tnx/v1', '/shipments', array(
             'methods'             => 'GET',
             'callback'            => array($this, 'get_shipments'),
@@ -61,6 +74,7 @@ class TNX_REST_API {
         return array(
             'api_token' => get_option('tnx_api_token', ''),
             'commission_rules' => get_option('tnx_commission_rules', array()),
+            'box_packing_enabled' => get_option('tnx_box_packing_enabled', 'no') === 'yes',
             'currency_symbol' => html_entity_decode(get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8'),
             'shipper'   => array(
                 'name'        => get_option('tnx_shipper_name', ''),
@@ -79,6 +93,10 @@ class TNX_REST_API {
 
         if (isset($params['api_token'])) {
             update_option('tnx_api_token', sanitize_text_field($params['api_token']));
+        }
+
+        if (isset($params['box_packing_enabled'])) {
+            update_option('tnx_box_packing_enabled', $params['box_packing_enabled'] ? 'yes' : 'no');
         }
 
         if (isset($params['shipper'])) {
@@ -172,5 +190,33 @@ class TNX_REST_API {
         }
         
         return rest_ensure_response($products);
+    }
+
+    public function get_box_definitions() {
+        return rest_ensure_response(get_option('tnx_box_definitions', array()));
+    }
+
+    public function save_box_definitions($request) {
+        $boxes = $request->get_param('boxes');
+        $sanitized_boxes = array();
+
+        if (is_array($boxes)) {
+            foreach ($boxes as $box) {
+                $sanitized_boxes[] = array(
+                    'name'         => sanitize_text_field($box['name'] ?? ''),
+                    'inner_length' => floatval($box['inner_length'] ?? 0),
+                    'inner_width'  => floatval($box['inner_width'] ?? 0),
+                    'inner_depth'  => floatval($box['inner_depth'] ?? 0),
+                    'outer_length' => floatval($box['outer_length'] ?? 0),
+                    'outer_width'  => floatval($box['outer_width'] ?? 0),
+                    'outer_depth'  => floatval($box['outer_depth'] ?? 0),
+                    'max_weight'   => floatval($box['max_weight'] ?? 0),
+                    'empty_weight' => floatval($box['empty_weight'] ?? 0),
+                );
+            }
+        }
+
+        update_option('tnx_box_definitions', $sanitized_boxes);
+        return rest_ensure_response(array('success' => true));
     }
 }

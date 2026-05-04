@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Save, Key, MapPin, Phone, User, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Save, Key, MapPin, Phone, User, CheckCircle2, AlertCircle, Loader2, Package } from 'lucide-react';
 import axios from 'axios';
 
 const SettingsPage = () => {
@@ -16,7 +16,8 @@ const SettingsPage = () => {
       state: '',
       postal_code: '',
       country: 'TH',
-    }
+    },
+    box_packing_enabled: false
   });
 
   useEffect(() => {
@@ -94,6 +95,31 @@ const SettingsPage = () => {
               <AlertCircle size={14} className="text-primary" />
               Found in: <a href="https://app.thainexus.co.th/" target="_blank" className="text-primary hover:underline font-medium">Profile Settings &gt; API Token</a>
             </p>
+          </div>
+          
+          <div className="mt-8 pt-8 border-t border-gray-100">
+            <div className="flex items-center justify-between bg-gray-50 p-6 rounded-2xl border border-gray-100">
+              <div className="flex items-start gap-4">
+                <div className="bg-white p-3 rounded-xl shadow-sm border border-gray-100">
+                  <Package className="text-primary w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-secondary">3D Box Packing Algorithm</h3>
+                  <p className="text-sm text-gray-500 mt-1 max-w-md">
+                    Automatically calculate the smallest box(es) for each order based on your box inventory.
+                  </p>
+                </div>
+              </div>
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input 
+                  type="checkbox" 
+                  className="sr-only peer" 
+                  checked={settings.box_packing_enabled}
+                  onChange={(e) => setSettings({ ...settings, box_packing_enabled: e.target.checked })}
+                />
+                <div className="w-14 h-7 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[4px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-6 after:w-6 after:transition-all peer-checked:bg-primary"></div>
+              </label>
+            </div>
           </div>
         </div>
       </div>

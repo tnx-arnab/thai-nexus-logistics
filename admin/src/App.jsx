@@ -3,6 +3,7 @@ import { Settings, Package, LayoutDashboard, Save, ExternalLink, RefreshCw, Doll
 import SettingsPage from './pages/SettingsPage';
 import ShipmentsPage from './pages/ShipmentsPage';
 import CommissionRulesPage from './pages/CommissionRulesPage';
+import BoxDefinitionsPage from './pages/BoxDefinitionsPage';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -63,6 +64,18 @@ const App = () => {
             <DollarSign size={18} />
             Fees
           </button>
+          <button
+            onClick={() => setActiveTab('boxes')}
+            className={cn(
+              "flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all",
+              activeTab === 'boxes' 
+                ? "bg-secondary text-white shadow-md" 
+                : "text-gray-600 hover:bg-gray-50"
+            )}
+          >
+            <Package size={18} />
+            Boxes
+          </button>
         </div>
       </header>
 
@@ -71,6 +84,7 @@ const App = () => {
         {activeTab === 'shipments' && <ShipmentsPage />}
         {activeTab === 'settings' && <SettingsPage />}
         {activeTab === 'commission' && <CommissionRulesPage />}
+        {activeTab === 'boxes' && <BoxDefinitionsPage />}
       </main>
 
       {/* Footer */}

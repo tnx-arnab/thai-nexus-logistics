@@ -87,63 +87,92 @@ class TNX_Order {
             'country'     => $order->get_shipping_country(),
         );
 
-        // Aggregate Product Dims
-        $total_weight = 0;
-        $max_length = 0;
-        $max_width = 0;
-        $max_height = 0;
-        $items_desc = array();
-
+        // Prepare Items for Packer
+        $tnx_items = array();
         foreach ($order->get_items() as $item) {
             $product = $item->get_product();
-            $qty = $item->get_quantity();
-            
-            $total_weight += ((float)$product->get_weight() ?: 0.5) * $qty;
-            $max_length = max($max_length, (float)$product->get_length() ?: 10);
-            $max_width = max($max_width, (float)$product->get_width() ?: 10);
-            $max_height = max($max_height, (float)$product->get_height() ?: 10);
-            
-            $items_desc[] = $product->get_name();
+            if ($product && $product->needs_shipping()) {
+                $tnx_items[] = array(
+                    'data'     => $product,
+                    'quantity' => $item->get_quantity(),
+                );
+            }
         }
 
-        $payload = array(
-            'data' => array(
-                'shipper_address'   => array(
-                    'name'          => $shipper['name'],
-                    'phone'         => $shipper['phone'],
-                    'address_line1' => $shipper['address'],
-                    'city'          => $shipper['city'],
-                    'state'         => $shipper['state'],
-                    'postal_code'   => $shipper['postal_code'],
-                    'country'       => $shipper['country'],
-                ),
-                'consignee_address' => array(
-                    'name'          => $consignee['name'],
-                    'phone'         => $consignee['phone'],
-                    'address_line1' => $consignee['address'],
-                    'city'          => $consignee['city'],
-                    'state'         => $consignee['state'],
-                    'postal_code'   => $consignee['postal_code'],
-                    'country'       => $consignee['country'],
-                ),
-                'actual_weight_kg'  => $total_weight,
-                'length_cm'         => $max_length,
-                'width_cm'          => $max_width,
-                'height_cm'         => $max_height,
-                'shipment_type'     => 'parcel',
-                'shipment_description' => implode(', ', $items_desc),
-            )
-        );
+        if (empty($tnx_items)) {
+            error_log("TNX Debug: No shippable items found for Order #$order_id");
+            return;
+        }
 
-        error_log("TNX Debug: Creating shipment with payload: " . json_encode($payload));
-        $response = $api->shipment_crud('create', $payload);
-        error_log("TNX Debug: API Response: " . json_encode($response));
+        // 3D Box Packing
+        $packer = TNX_Box_Packer::get_instance();
+        $packing_result = $packer->pack_items($tnx_items);
 
-        if (!is_wp_error($response) && isset($response['data']['request_number'])) {
-            $shipment_data = $response['data'];
-            $order->update_meta_data('_tnx_shipment_id', $shipment_data['id']);
-            $order->update_meta_data('_tnx_request_number', $shipment_data['request_number']);
-            $order->update_meta_data('_tnx_status', $shipment_data['status']);
+        if ($packing_result->has_errors()) {
+            error_log("TNX Debug: Shipment creation aborted for Order #$order_id due to packing errors: " . implode(', ', $packing_result->get_errors()));
+            return;
+        }
+
+        $packed_boxes = $packing_result->get_all_shipment_boxes();
+
+        if (empty($packed_boxes)) {
+            error_log("TNX Debug: Box packing failed for Order #$order_id");
+            return;
+        }
+
+        $api = TNX_API::get_instance();
+        $shipments_created = array();
+
+        foreach ($packed_boxes as $index => $box) {
+            $box_items_desc = implode(', ', $box['items'] ?? []);
+            $payload = array(
+                'data' => array(
+                    'shipper_address'   => array(
+                        'name'          => $shipper['name'],
+                        'phone'         => $shipper['phone'],
+                        'address_line1' => $shipper['address'],
+                        'city'          => $shipper['city'],
+                        'state'         => $shipper['state'],
+                        'postal_code'   => $shipper['postal_code'],
+                        'country'       => $shipper['country'],
+                    ),
+                    'consignee_address' => array(
+                        'name'          => $consignee['name'],
+                        'phone'         => $consignee['phone'],
+                        'address_line1' => $consignee['address'],
+                        'city'          => $consignee['city'],
+                        'state'         => $consignee['state'],
+                        'postal_code'   => $consignee['postal_code'],
+                        'country'       => $consignee['country'],
+                    ),
+                    'actual_weight_kg'  => $box['weight'],
+                    'length_cm'         => $box['length'],
+                    'width_cm'          => $box['width'],
+                    'height_cm'         => $box['height'],
+                    'shipment_type'     => 'parcel',
+                    'shipment_description' => "Box " . ($index + 1) . "/" . count($packed_boxes) . ": " . $box_items_desc,
+                )
+            );
+
+            error_log("TNX Debug: Creating shipment for box " . ($index + 1) . " with payload: " . json_encode($payload));
+            $response = $api->shipment_crud('create', $payload);
+            error_log("TNX Debug: API Response for box " . ($index + 1) . ": " . json_encode($response));
+
+            if (!is_wp_error($response) && isset($response['data']['request_number'])) {
+                $shipments_created[] = $response['data'];
+            }
+        }
+
+        if (!empty($shipments_created)) {
+            // Save primary (first) shipment details
+            $primary = $shipments_created[0];
+            $order->update_meta_data('_tnx_shipment_id', $primary['id']);
+            $order->update_meta_data('_tnx_request_number', $primary['request_number']);
+            $order->update_meta_data('_tnx_status', $primary['status']);
+            
+            // Save all shipments as metadata
+            $order->update_meta_data('_tnx_all_shipments', $shipments_created);
+            $order->update_meta_data('_tnx_packed_boxes', $packed_boxes);
             $order->save();
         }
     }
@@ -166,6 +195,8 @@ class TNX_Order {
         $order = wc_get_order($post->ID);
         $req_num = $order->get_meta('_tnx_request_number');
         $status = $order->get_meta('_tnx_status');
+        $all_shipments = $order->get_meta('_tnx_all_shipments');
+        $packed_boxes = $order->get_meta('_tnx_packed_boxes');
 
         if (!$req_num) {
             echo '<p>' . __('No TNX shipment associated with this order.', 'thai-nexus-logistics') . '</p>';
@@ -173,10 +204,27 @@ class TNX_Order {
         }
 
         echo '<div class="tnx-order-meta" style="font-family: sans-serif;">';
-        echo '<p><strong>' . __('Request Number:', 'thai-nexus-logistics') . '</strong> <code style="background: #f0f0f1; padding: 2px 4px; border-radius: 4px;">' . esc_html($req_num) . '</code></p>';
-        echo '<p><strong>' . __('Status:', 'thai-nexus-logistics') . '</strong> <span style="color: #dc2626; font-weight: bold;">' . esc_html($status) . '</span></p>';
+        
+        if (!empty($all_shipments) && is_array($all_shipments)) {
+            echo '<p><strong>' . __('Shipments:', 'thai-nexus-logistics') . '</strong></p>';
+            echo '<ul style="margin: 0 0 15px 0; padding: 0; list-style: none;">';
+            foreach ($all_shipments as $index => $shipment) {
+                $box = $packed_boxes[$index] ?? null;
+                $box_info = $box ? " ({$box['length']}x{$box['width']}x{$box['height']} cm, {$box['weight']} kg)" : "";
+                echo '<li style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f1;">';
+                echo '<code style="background: #f0f0f1; padding: 2px 4px; border-radius: 4px;">' . esc_html($shipment['request_number']) . '</code>';
+                echo '<span style="float: right; color: #dc2626; font-weight: bold; font-size: 11px; text-transform: uppercase;">' . esc_html($shipment['status']) . '</span>';
+                echo '<div style="font-size: 11px; color: #64748b; margin-top: 4px;">' . __('Box', 'thai-nexus-logistics') . ' ' . ($index + 1) . $box_info . '</div>';
+                echo '</li>';
+            }
+            echo '</ul>';
+        } else {
+            echo '<p><strong>' . __('Request Number:', 'thai-nexus-logistics') . '</strong> <code style="background: #f0f0f1; padding: 2px 4px; border-radius: 4px;">' . esc_html($req_num) . '</code></p>';
+            echo '<p><strong>' . __('Status:', 'thai-nexus-logistics') . '</strong> <span style="color: #dc2626; font-weight: bold;">' . esc_html($status) . '</span></p>';
+        }
+
         echo '<hr />';
-        echo '<a href="' . admin_url('admin.php?page=tnx-logistics') . '" class="button button-primary" style="background: #272262; border-color: #272262;">' . __('View in Dashboard', 'thai-nexus-logistics') . '</a>';
+        echo '<a href="' . admin_url('admin.php?page=tnx-logistics') . '" class="button button-primary" style="background: #272262; border-color: #272262; width: 100%; text-align: center;">' . __('View in Dashboard', 'thai-nexus-logistics') . '</a>';
         echo '</div>';
     }
 }

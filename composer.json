@@ -1,0 +1,6 @@
+{
+    "name": "thainexus/thai-nexus-logistics",
+    "require": {
+        "dvdoug/boxpacker": "^4.0"
+    }
+}

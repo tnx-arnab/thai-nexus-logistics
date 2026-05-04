@@ -45,6 +45,7 @@ class TNX_Shipping_Method extends WC_Shipping_Method {
     }
 
     public function calculate_shipping($package = array()) {
+        error_log("TNX Debug: Calculating shipping for " . count($package['contents']) . " items.");
         $dest = $package['destination'];
 
 
@@ -65,74 +66,90 @@ class TNX_Shipping_Method extends WC_Shipping_Method {
             return;
         }
 
-        // Aggregate dimensions
-        $total_weight = 0;
-        $max_length = 0;
-        $max_width = 0;
-        $max_height = 0;
+        // 3D Box Packing Implementation
+        $packer = TNX_Box_Packer::get_instance();
+        $packing_result = $packer->pack_items($tnx_items);
 
-        foreach ($tnx_items as $item) {
-            $product = $item['data'];
-            $qty = $item['quantity'];
-
-            $weight = (float) $product->get_weight() ?: 0.5; // Default if missing
-            $length = (float) $product->get_length() ?: 10;
-            $width = (float) $product->get_width() ?: 10;
-            $height = (float) $product->get_height() ?: 10;
-
-            $total_weight += ($weight * $qty);
-            $max_length = max($max_length, $length);
-            $max_width = max($max_width, $width);
-            $max_height = max($max_height, $height);
+        if ($packing_result->has_errors()) {
+            foreach ($packing_result->get_errors() as $error) {
+                wc_add_notice($error, 'error');
+            }
+            return;
         }
 
-        $response = TNX_API::get_instance()->get_quote(array(
-            'country'           => $dest['country'],
-            'state'             => $dest['state'],
-            'postcode'          => $dest['postcode'],
-            'city'              => $dest['city'],
-            'actual_weight_kg'  => $total_weight,
-            'length_cm'         => $max_length,
-            'width_cm'          => $max_width,
-            'height_cm'         => $max_height,
-        ));
+        $packed_boxes = $packing_result->get_all_shipment_boxes();
+        error_log("TNX Debug: Packing complete. Boxes to quote: " . count($packed_boxes));
 
-        if (is_wp_error($response)) {
-
-            return; // Fail gracefully
+        if (empty($packed_boxes)) {
+            return;
         }
 
-        if (isset($response['quotes']) && is_array($response['quotes'])) {
-            $target_currency = get_woocommerce_currency();
-            $rate = TNX_Currency::get_instance()->get_rate('THB', $target_currency);
-            $commission = TNX_Commission::get_instance()->get_total_commission();
+        $all_quotes = array();
+        $target_currency = get_woocommerce_currency();
+        $rate = TNX_Currency::get_instance()->get_rate('THB', $target_currency);
+        $commission = TNX_Commission::get_instance()->get_total_commission();
+
+        foreach ($packed_boxes as $box) {
+            $response = TNX_API::get_instance()->get_quote(array(
+                'country'           => $dest['country'],
+                'state'             => $dest['state'],
+                'postcode'          => $dest['postcode'],
+                'city'              => $dest['city'],
+                'actual_weight_kg'  => $box['weight'],
+                'length_cm'         => $box['length'],
+                'width_cm'          => $box['width'],
+                'height_cm'         => $box['height'],
+            ));
+
+            if (is_wp_error($response) || !isset($response['quotes'])) {
+                continue;
+            }
 
             foreach ($response['quotes'] as $quote) {
-                // Add destination hash to ID to force WooCommerce to refresh rates when address changes
-                $rate_id = 'tnx_' . sanitize_title($quote['courier_name']) . '_' . substr(md5($dest['country'] . $dest['postcode']), 0, 6);
-                
-                $cost = (float) $quote['final_price_thb'];
-                if ($rate) {
-                    $cost = $cost * $rate;
+                $courier = $quote['courier_name'];
+                if (!isset($all_quotes[$courier])) {
+                    $all_quotes[$courier] = array(
+                        'display_name'   => $quote['display_name'],
+                        'estimated_days' => $quote['estimated_days'],
+                        'total_price'    => 0,
+                        'count'          => 0,
+                    );
                 }
-
-                // Add hidden commission buffer
-                $cost += $commission;
-
-                $this->add_rate(array(
-                    'id'    => $rate_id,
-                    'label' => $quote['display_name'] . ' (' . ($quote['estimated_days'] ?: 'TBA') . ' days)',
-                    'cost'  => $cost,
-                    'meta_data' => array(
-                        'tnx_courier' => $quote['courier_name'],
-                        'tnx_breakdown' => array(
-                            'base_price' => $cost - $commission,
-                            'commission' => $commission,
-                            'total'      => $cost
-                        )
-                    )
-                ));
+                $all_quotes[$courier]['total_price'] += (float) $quote['final_price_thb'];
+                $all_quotes[$courier]['count']++;
             }
+        }
+
+        // Only show couriers that could quote ALL boxes
+        $box_count = count($packed_boxes);
+        foreach ($all_quotes as $courier => $data) {
+            if ($data['count'] < $box_count) continue;
+
+            $cost = $data['total_price'];
+            if ($rate) {
+                $cost = $cost * $rate;
+            }
+
+            // Add hidden commission buffer
+            $cost += $commission;
+
+            // Add destination hash to ID to force WooCommerce to refresh rates when address changes
+            $rate_id = 'tnx_' . sanitize_title($courier) . '_' . substr(md5($dest['country'] . $dest['postcode']), 0, 6);
+
+            $this->add_rate(array(
+                'id'    => $rate_id,
+                'label' => $data['display_name'] . ' (' . ($data['estimated_days'] ?: 'TBA') . ' days)',
+                'cost'  => $cost,
+                'meta_data' => array(
+                    'tnx_courier' => $courier,
+                    'tnx_boxes'   => $packed_boxes,
+                    'tnx_breakdown' => array(
+                        'base_price' => $cost - $commission,
+                        'commission' => $commission,
+                        'total'      => $cost
+                    )
+                )
+            ));
         }
     }
 }
