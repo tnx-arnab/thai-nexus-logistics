@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Thai Nexus Logistics
  * Description: Real-time shipping quotations and automated shipment creation via Thai Nexus API.
- * Version: 1.5.0
+ * Version: 1.5.2
  * Author: Thai Nexus Logistics
  * Text Domain: thai-nexus-logistics
  * Requires at least: 5.8
