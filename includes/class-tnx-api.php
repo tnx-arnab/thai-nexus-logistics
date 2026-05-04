@@ -9,6 +9,7 @@ class TNX_API {
 
     private static $instance = null;
     private $base_url = 'https://app.thainexus.co.th/functions/';
+    public static $last_debug_data = array();
 
     public static function get_instance() {
         if (null === self::$instance) {
@@ -86,8 +87,16 @@ class TNX_API {
         $body_raw    = wp_remote_retrieve_body($response);
         $body        = json_decode($body_raw, true);
 
-        if ($status_code >= 400 || empty($body)) {
+        if (TNX_Debug_Logger::is_enabled()) {
+            self::$last_debug_data[] = array(
+                'endpoint' => $endpoint,
+                'payload'  => $payload,
+                'response' => $body ?: $body_raw,
+                'status'   => $status_code,
+            );
+        }
 
+        if ($status_code >= 400 || empty($body)) {
             return new WP_Error('tnx_api_error', isset($body['message']) ? $body['message'] : __('API request failed', 'thai-nexus-logistics'), $body);
         }
 

@@ -79,6 +79,7 @@ class TNX_Admin {
                 'apiUrl' => esc_url_raw(rest_url('tnx/v1')),
                 'nonce'  => wp_create_nonce('wp_rest'),
                 'assets' => TNX_PLUGIN_URL . 'assets/',
+                'debugEnabled' => TNX_Debug_Logger::is_enabled(),
             ));
         } else {
             // Fallback/Warning if not built yet

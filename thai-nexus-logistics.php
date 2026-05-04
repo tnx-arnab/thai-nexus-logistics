@@ -11,6 +11,11 @@
 
 if (!defined('ABSPATH')) exit;
 
+// Temporary Debug Mode (will be removed before release)
+if (!defined('TNX_DEBUG_LOG')) {
+    define('TNX_DEBUG_LOG', true);
+}
+
 // Define Constants
 define('TNX_VERSION', '1.0.0');
 define('TNX_PLUGIN_DIR', plugin_dir_path(__FILE__));
@@ -49,6 +54,7 @@ class Thai_Nexus_Logistics {
     private function load_dependencies() {
         require_once TNX_PLUGIN_DIR . 'includes/class-tnx-api.php';
         require_once TNX_PLUGIN_DIR . 'includes/class-tnx-admin.php';
+        require_once TNX_PLUGIN_DIR . 'includes/class-tnx-debug-logger.php';
         require_once TNX_PLUGIN_DIR . 'includes/class-tnx-rest-api.php';
         require_once TNX_PLUGIN_DIR . 'includes/class-tnx-currency.php';
     }

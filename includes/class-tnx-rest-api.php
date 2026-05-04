@@ -64,6 +64,19 @@ class TNX_REST_API {
             'callback'            => array($this, 'get_shipment_details'),
             'permission_callback' => array($this, 'check_permission'),
         ));
+
+        register_rest_route('tnx/v1', '/debug-log', array(
+            array(
+                'methods'             => 'GET',
+                'callback'            => array($this, 'get_debug_log'),
+                'permission_callback' => array($this, 'check_permission'),
+            ),
+            array(
+                'methods'             => 'DELETE',
+                'callback'            => array($this, 'clear_debug_log'),
+                'permission_callback' => array($this, 'check_permission'),
+            ),
+        ));
     }
 
     public function check_permission() {
@@ -212,6 +225,21 @@ class TNX_REST_API {
         }
 
         update_option('tnx_box_definitions', $sanitized_boxes);
+        return rest_ensure_response(array('success' => true));
+    }
+
+    public function get_debug_log() {
+        if (!TNX_Debug_Logger::is_enabled()) {
+            return new WP_Error('disabled', 'Debug logging is disabled.', array('status' => 403));
+        }
+        return rest_ensure_response(TNX_Debug_Logger::get_instance()->get_entries());
+    }
+
+    public function clear_debug_log() {
+        if (!TNX_Debug_Logger::is_enabled()) {
+            return new WP_Error('disabled', 'Debug logging is disabled.', array('status' => 403));
+        }
+        TNX_Debug_Logger::get_instance()->clear();
         return rest_ensure_response(array('success' => true));
     }
 }

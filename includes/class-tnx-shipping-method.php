@@ -45,21 +45,35 @@ class TNX_Shipping_Method extends WC_Shipping_Method {
     }
 
     public function calculate_shipping($package = array()) {
+        $debug_enabled = TNX_Debug_Logger::is_enabled();
+        if ($debug_enabled) {
+            TNX_API::$last_debug_data = array(); // Reset
+        }
+
         error_log("TNX Debug: Calculating shipping for " . count($package['contents']) . " items.");
         $dest = $package['destination'];
 
-
         if ($this->enabled === 'no') {
-
             return;
         }
 
         $items = $package['contents'];
         $tnx_items = array();
+        $debug_products = array();
 
         // Process all items in the package
         foreach ($items as $item_id => $values) {
             $tnx_items[] = $values;
+            if ($debug_enabled) {
+                $product = $values['data'];
+                $debug_products[] = array(
+                    'id'    => $product->get_id(),
+                    'title' => $product->get_name(),
+                    'qty'   => $values['quantity'],
+                    'dimensions' => sprintf('%sx%sx%s cm', $product->get_length(), $product->get_width(), $product->get_height()),
+                    'weight' => $product->get_weight() . ' kg',
+                );
+            }
         }
 
         if (empty($tnx_items)) {
@@ -122,6 +136,8 @@ class TNX_Shipping_Method extends WC_Shipping_Method {
 
         // Only show couriers that could quote ALL boxes
         $box_count = count($packed_boxes);
+        $final_quotes_debug = array();
+
         foreach ($all_quotes as $courier => $data) {
             if ($data['count'] < $box_count) continue;
 
@@ -149,6 +165,30 @@ class TNX_Shipping_Method extends WC_Shipping_Method {
                         'total'      => $cost
                     )
                 )
+            ));
+
+            if ($debug_enabled) {
+                $final_quotes_debug[] = array(
+                    'courier' => $data['display_name'],
+                    'price_thb' => $data['total_price'],
+                    'final_cost' => $cost,
+                    'days' => $data['estimated_days'] ?: 'TBA',
+                );
+            }
+        }
+
+        // Save Debug Log
+        if ($debug_enabled) {
+            TNX_Debug_Logger::get_instance()->log_entry(array(
+                'products'       => $debug_products,
+                'boxes'          => $packed_boxes,
+                'box_count'      => count($packed_boxes),
+                'api_calls'      => TNX_API::$last_debug_data,
+                'destination'    => $dest,
+                'final_quotes'   => $final_quotes_debug,
+                'currency'       => $target_currency,
+                'exchange_rate'  => $rate,
+                'commission'     => $commission,
             ));
         }
     }

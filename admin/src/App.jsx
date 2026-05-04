@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Package, LayoutDashboard, Save, ExternalLink, RefreshCw, DollarSign } from 'lucide-react';
+import { Settings, Package, LayoutDashboard, Save, ExternalLink, RefreshCw, DollarSign, Terminal } from 'lucide-react';
 import SettingsPage from './pages/SettingsPage';
 import ShipmentsPage from './pages/ShipmentsPage';
 import CommissionRulesPage from './pages/CommissionRulesPage';
 import BoxDefinitionsPage from './pages/BoxDefinitionsPage';
+import DebugLogPage from './pages/DebugLogPage';
 import { clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 
@@ -12,6 +13,8 @@ function cn(...inputs) {
 }
 
 const App = () => {
+  // @ts-ignore
+  const debugEnabled = window.tnxData?.debugEnabled || false;
   const [activeTab, setActiveTab] = useState('shipments');
   const [loading, setLoading] = useState(false);
 
@@ -27,7 +30,7 @@ const App = () => {
           <p className="text-gray-500 mt-1">Manage your shipping operations and API configurations.</p>
         </div>
         
-        <div className="flex items-center gap-4 bg-white p-1 rounded-xl shadow-sm border border-gray-100">
+        <div className="flex items-center gap-4 bg-white p-1 rounded-xl shadow-sm border border-gray-100 flex-wrap">
           <button
             onClick={() => setActiveTab('shipments')}
             className={cn(
@@ -76,6 +79,21 @@ const App = () => {
             <Package size={18} />
             Boxes
           </button>
+          
+          {debugEnabled && (
+            <button
+              onClick={() => setActiveTab('debug')}
+              className={cn(
+                "flex items-center gap-2 px-5 py-2.5 rounded-lg font-medium transition-all border border-transparent",
+                activeTab === 'debug' 
+                  ? "bg-amber-500 text-white shadow-md border-amber-600" 
+                  : "text-amber-600 hover:bg-amber-50 border-amber-100/50"
+              )}
+            >
+              <Terminal size={18} />
+              Debug
+            </button>
+          )}
         </div>
       </header>
 
@@ -85,6 +103,7 @@ const App = () => {
         {activeTab === 'settings' && <SettingsPage />}
         {activeTab === 'commission' && <CommissionRulesPage />}
         {activeTab === 'boxes' && <BoxDefinitionsPage />}
+        {activeTab === 'debug' && debugEnabled && <DebugLogPage />}
       </main>
 
       {/* Footer */}

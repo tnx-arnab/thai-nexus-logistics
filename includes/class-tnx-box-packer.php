@@ -32,9 +32,9 @@ class TNX_Box implements BoxInterface {
         $this->innerLength = (float) ($data['inner_length'] ?? 0);
         $this->innerDepth  = (float) ($data['inner_depth'] ?? 0);
         
-        $this->outerWidth  = (float) ($data['outer_width'] ?? ($this->innerWidth + 1));
-        $this->outerLength = (float) ($data['outer_length'] ?? ($this->innerLength + 1));
-        $this->outerDepth  = (float) ($data['outer_depth'] ?? ($this->innerDepth + 1));
+        $this->outerWidth  = (float) (!empty($data['outer_width']) ? $data['outer_width'] : ($this->innerWidth ?: 0.1));
+        $this->outerLength = (float) (!empty($data['outer_length']) ? $data['outer_length'] : ($this->innerLength ?: 0.1));
+        $this->outerDepth  = (float) (!empty($data['outer_depth']) ? $data['outer_depth'] : ($this->innerDepth ?: 0.1));
         
         $this->emptyWeight = (float) ($data['empty_weight'] ?? 0.1);
         $this->maxWeight   = (float) ($data['max_weight'] ?? 10);

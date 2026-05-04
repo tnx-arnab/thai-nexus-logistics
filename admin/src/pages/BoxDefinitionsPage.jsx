@@ -75,7 +75,14 @@ const BoxDefinitionsPage = () => {
 
   const updateBox = (index, field, value) => {
     const newBoxes = [...boxes];
-    newBoxes[index][field] = value;
+    const box = newBoxes[index];
+    box[field] = value;
+
+    // Auto-sync outer dimensions if they match or are 0
+    if (field === 'inner_length' && (!box.outer_length || box.outer_length === box.inner_length)) box.outer_length = value;
+    if (field === 'inner_width' && (!box.outer_width || box.outer_width === box.inner_width)) box.outer_width = value;
+    if (field === 'inner_depth' && (!box.outer_depth || box.outer_depth === box.inner_depth)) box.outer_depth = value;
+
     setBoxes(newBoxes);
   };
 
