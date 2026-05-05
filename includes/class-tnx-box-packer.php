@@ -32,12 +32,19 @@ class TNX_Box implements BoxInterface {
         $this->innerLength = (float) ($data['inner_length'] ?? 0);
         $this->innerDepth  = (float) ($data['inner_depth'] ?? 0);
         
-        $this->outerWidth  = (float) (!empty($data['outer_width']) ? $data['outer_width'] : ($this->innerWidth ?: 0.1));
-        $this->outerLength = (float) (!empty($data['outer_length']) ? $data['outer_length'] : ($this->innerLength ?: 0.1));
-        $this->outerDepth  = (float) (!empty($data['outer_depth']) ? $data['outer_depth'] : ($this->innerDepth ?: 0.1));
+        $this->outerWidth  = max((float) ($data['outer_width'] ?? 0), $this->innerWidth ?: 0.1);
+        $this->outerLength = max((float) ($data['outer_length'] ?? 0), $this->innerLength ?: 0.1);
+        $this->outerDepth  = max((float) ($data['outer_depth'] ?? 0), $this->innerDepth ?: 0.1);
         
         $this->emptyWeight = (float) ($data['empty_weight'] ?? 0.1);
         $this->maxWeight   = (float) ($data['max_weight'] ?? 10);
+
+        error_log(sprintf(
+            "TNX Debug Box Init: %s (Inner: %sx%sx%s, Outer: %sx%sx%s)",
+            $this->reference,
+            $this->innerLength, $this->innerWidth, $this->innerDepth,
+            $this->outerLength, $this->outerWidth, $this->outerDepth
+        ));
     }
 
     public function getReference(): string { return $this->reference; }

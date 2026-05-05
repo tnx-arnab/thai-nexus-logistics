@@ -17,7 +17,7 @@ if (!defined('TNX_DEBUG_LOG')) {
 }
 
 // Define Constants
-define('TNX_VERSION', '1.0.0');
+define('TNX_VERSION', '1.5.3');
 define('TNX_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('TNX_PLUGIN_URL', plugin_dir_url(__FILE__));
 

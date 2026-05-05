@@ -215,9 +215,10 @@ class TNX_REST_API {
                     'inner_length' => floatval($box['inner_length'] ?? 0),
                     'inner_width'  => floatval($box['inner_width'] ?? 0),
                     'inner_depth'  => floatval($box['inner_depth'] ?? 0),
-                    'outer_length' => floatval($box['outer_length'] ?? 0),
-                    'outer_width'  => floatval($box['outer_width'] ?? 0),
-                    'outer_depth'  => floatval($box['outer_depth'] ?? 0),
+                    // Since we don't show outer dimensions in UI, enforce sync on save
+                    'outer_length' => floatval($box['inner_length'] ?? 0),
+                    'outer_width'  => floatval($box['inner_width'] ?? 0),
+                    'outer_depth'  => floatval($box['inner_depth'] ?? 0),
                     'max_weight'   => floatval($box['max_weight'] ?? 0),
                     'empty_weight' => floatval($box['empty_weight'] ?? 0),
                 );
