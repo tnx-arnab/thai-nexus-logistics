@@ -29,8 +29,8 @@ class TNX_API {
         $cache_key = 'tnx_quote_' . md5(json_encode($data));
         $cached    = get_transient($cache_key);
         
-        if ($cached !== false) {
-
+        // Bypass cache if debug mode is enabled to ensure fresh pricing
+        if ($cached !== false && !TNX_Debug_Logger::is_enabled()) {
             return $cached;
         }
 

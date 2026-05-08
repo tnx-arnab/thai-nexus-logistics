@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { Trash2, RefreshCw, ChevronDown, ChevronUp, Package, Box, Zap, MapPin, Terminal, Activity, FileText } from 'lucide-react';
 import axios from 'axios';
+import ConfirmModal from '../components/ConfirmModal';
+import Notification from '../components/Notification';
 
 const DebugLogPage = () => {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
   const [expandedId, setExpandedId] = useState(null);
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [modal, setModal] = useState({ isOpen: false, title: '', message: '', onConfirm: () => {}, variant: 'danger' });
+  const [notification, setNotification] = useState(null);
 
   useEffect(() => {
     fetchLogs();
@@ -38,8 +42,11 @@ const DebugLogPage = () => {
     }
   };
 
+  const showNotification = (message, type = 'success') => {
+    setNotification({ message, type });
+  };
+
   const clearLogs = async () => {
-    if (!window.confirm('Are you sure you want to clear all debug logs?')) return;
     try {
       // @ts-ignore
       await axios.delete(window.tnxData.apiUrl + '/debug-log', {
@@ -49,9 +56,47 @@ const DebugLogPage = () => {
         }
       });
       setLogs([]);
+      showNotification('Debug logs cleared successfully.');
     } catch (error) {
       console.error('Failed to clear logs', error);
+      showNotification('Failed to clear logs.', 'error');
     }
+  };
+
+  const handleClearLogs = () => {
+    setModal({
+      isOpen: true,
+      title: 'Clear Debug Logs',
+      message: 'Are you sure you want to clear all debug logs? This action cannot be undone.',
+      onConfirm: clearLogs,
+      variant: 'danger'
+    });
+  };
+
+  const clearCache = async () => {
+    try {
+      // @ts-ignore
+      await axios.delete(window.tnxData.apiUrl + '/cache', {
+        headers: {
+          // @ts-ignore
+          'X-WP-Nonce': window.tnxData.nonce
+        }
+      });
+      showNotification('Pricing cache cleared successfully!');
+    } catch (error) {
+      console.error('Failed to clear cache', error);
+      showNotification('Failed to clear cache.', 'error');
+    }
+  };
+
+  const handleClearCache = () => {
+    setModal({
+      isOpen: true,
+      title: 'Clear Shipping Cache',
+      message: 'Are you sure you want to clear all cached shipping prices? This will force the API to fetch fresh quotes for new requests.',
+      onConfirm: clearCache,
+      variant: 'amber'
+    });
   };
 
   const toggleExpand = (id) => {
@@ -87,11 +132,18 @@ const DebugLogPage = () => {
             Refresh
           </button>
           <button 
-            onClick={clearLogs} 
+            onClick={handleClearCache} 
+            className="flex items-center gap-2 px-4 py-2 bg-amber-50 text-amber-600 border border-amber-100 rounded-lg hover:bg-amber-100 transition-colors text-sm font-medium"
+          >
+            <Activity size={16} />
+            Clear Cache
+          </button>
+          <button 
+            onClick={handleClearLogs} 
             className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium"
           >
             <Trash2 size={16} />
-            Clear All
+            Clear Logs
           </button>
         </div>
       </div>
@@ -258,6 +310,23 @@ const DebugLogPage = () => {
             </div>
           ))}
         </div>
+      )}
+
+      <ConfirmModal 
+        isOpen={modal.isOpen}
+        onClose={() => setModal({ ...modal, isOpen: false })}
+        onConfirm={modal.onConfirm}
+        title={modal.title}
+        message={modal.message}
+        variant={modal.variant}
+      />
+
+      {notification && (
+        <Notification 
+          message={notification.message}
+          type={notification.type}
+          onClose={() => setNotification(null)}
+        />
       )}
     </div>
   );

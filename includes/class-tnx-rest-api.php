@@ -77,6 +77,14 @@ class TNX_REST_API {
                 'permission_callback' => array($this, 'check_permission'),
             ),
         ));
+
+        register_rest_route('tnx/v1', '/cache', array(
+            array(
+                'methods'             => 'DELETE',
+                'callback'            => array($this, 'clear_cache'),
+                'permission_callback' => array($this, 'check_permission'),
+            ),
+        ));
     }
 
     public function check_permission() {
@@ -241,6 +249,24 @@ class TNX_REST_API {
             return new WP_Error('disabled', 'Debug logging is disabled.', array('status' => 403));
         }
         TNX_Debug_Logger::get_instance()->clear();
+        return rest_ensure_response(array('success' => true));
+    }
+
+    public function clear_cache() {
+        global $wpdb;
+        
+        // Delete all transients starting with tnx_quote_
+        $prefix = '_transient_tnx_quote_';
+        $prefix_timeout = '_transient_timeout_tnx_quote_';
+        
+        $wpdb->query(
+            $wpdb->prepare(
+                "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
+                $wpdb->esc_like($prefix) . '%',
+                $wpdb->esc_like($prefix_timeout) . '%'
+            )
+        );
+        
         return rest_ensure_response(array('success' => true));
     }
 }
