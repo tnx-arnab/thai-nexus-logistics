@@ -17,6 +17,29 @@ class TNX_Product {
     }
 
     private function __construct() {
-        // Product-level settings removed as shipping is now global.
+        add_action('woocommerce_product_options_shipping', array($this, 'add_shipping_fields'));
+        add_action('woocommerce_process_product_meta', array($this, 'save_shipping_fields'));
+    }
+
+    /**
+     * Add "Is Document" checkbox to Product Shipping tab
+     */
+    public function add_shipping_fields() {
+        echo '<div class="options_group">';
+        woocommerce_wp_checkbox(array(
+            'id'            => '_tnx_is_document',
+            'label'         => __('Is Document?', 'thai-nexus-logistics'),
+            'description'   => __('Check this if the product is a document. If all items in cart are documents, document-specific rates will be retrieved.', 'thai-nexus-logistics'),
+            'desc_tip'      => true,
+        ));
+        echo '</div>';
+    }
+
+    /**
+     * Save Product Shipping fields
+     */
+    public function save_shipping_fields($post_id) {
+        $is_document = isset($_POST['_tnx_is_document']) ? 'yes' : 'no';
+        update_post_meta($post_id, '_tnx_is_document', $is_document);
     }
 }

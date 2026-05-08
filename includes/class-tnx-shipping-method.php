@@ -60,18 +60,26 @@ class TNX_Shipping_Method extends WC_Shipping_Method {
         $items = $package['contents'];
         $tnx_items = array();
         $debug_products = array();
+        $is_document = true;
 
         // Process all items in the package
         foreach ($items as $item_id => $values) {
             $tnx_items[] = $values;
+            $product = $values['data'];
+            
+            // If any product is NOT a document, the whole shipment is not a document
+            if ($product->get_meta('_tnx_is_document') !== 'yes') {
+                $is_document = false;
+            }
+
             if ($debug_enabled) {
-                $product = $values['data'];
                 $debug_products[] = array(
                     'id'    => $product->get_id(),
                     'title' => $product->get_name(),
                     'qty'   => $values['quantity'],
                     'dimensions' => sprintf('%sx%sx%s cm', $product->get_length(), $product->get_width(), $product->get_height()),
                     'weight' => $product->get_weight() . ' kg',
+                    'is_document' => $product->get_meta('_tnx_is_document') === 'yes',
                 );
             }
         }
@@ -113,6 +121,7 @@ class TNX_Shipping_Method extends WC_Shipping_Method {
                 'length_cm'         => $box['length'],
                 'width_cm'          => $box['width'],
                 'height_cm'         => $box['height'],
+                'is_document'       => $is_document,
             ));
 
             if (is_wp_error($response) || !isset($response['quotes'])) {
