@@ -121,7 +121,7 @@ class TNX_Packing_Result {
         $all = $this->boxes;
         foreach ($this->unpacked_items as $item) {
             $box = [
-                'name'   => 'Individual Item (Oversized)',
+                'name'   => __('Individual Item (Oversized)', 'thai-nexus-logistics'),
                 'length' => (float) $item->getLength() / 10,
                 'width'  => (float) $item->getWidth() / 10,
                 'height' => (float) $item->getDepth() / 10,
@@ -330,7 +330,7 @@ class TNX_Box_Packer {
                 }
             }
             $result->add_box([
-                'name'   => 'Standard Package (Fallback)',
+                'name'   => __('Standard Package (Fallback)', 'thai-nexus-logistics'),
                 'length' => $max_length,
                 'width'  => $max_width,
                 'height' => $max_height,

@@ -239,14 +239,14 @@ class TNX_REST_API {
 
     public function get_debug_log() {
         if (!TNX_Debug_Logger::is_enabled()) {
-            return new WP_Error('disabled', 'Debug logging is disabled.', array('status' => 403));
+            return new WP_Error('disabled', __('Debug logging is disabled.', 'thai-nexus-logistics'), array('status' => 403));
         }
         return rest_ensure_response(TNX_Debug_Logger::get_instance()->get_entries());
     }
 
     public function clear_debug_log() {
         if (!TNX_Debug_Logger::is_enabled()) {
-            return new WP_Error('disabled', 'Debug logging is disabled.', array('status' => 403));
+            return new WP_Error('disabled', __('Debug logging is disabled.', 'thai-nexus-logistics'), array('status' => 403));
         }
         TNX_Debug_Logger::get_instance()->clear();
         return rest_ensure_response(array('success' => true));

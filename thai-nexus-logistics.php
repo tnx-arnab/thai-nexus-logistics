@@ -2,13 +2,14 @@
 /**
  * Plugin Name: Thai Nexus Logistics
  * Description: Real-time shipping quotations and automated shipment creation via Thai Nexus API.
- * Version: 1.5.2
- * Author: Thai Nexus Logistics
+ * Version: 1.5.3
+ * Author: thainexus
  * Text Domain: thai-nexus-logistics
  * License: GPL-2.0+
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Requires at least: 5.8
  * Requires PHP: 7.4
+ * Tested up to: 6.7
  */
 
 if (!defined('ABSPATH')) exit;
