@@ -259,13 +259,8 @@ class TNX_REST_API {
         $prefix = '_transient_tnx_quote_';
         $prefix_timeout = '_transient_timeout_tnx_quote_';
         
-        $wpdb->query(
-            $wpdb->prepare(
-                "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s",
-                $wpdb->esc_like($prefix) . '%',
-                $wpdb->esc_like($prefix_timeout) . '%'
-            )
-        );
+        // phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching
+        $wpdb->query( $wpdb->prepare( "DELETE FROM {$wpdb->options} WHERE option_name LIKE %s OR option_name LIKE %s", $wpdb->esc_like($prefix) . '%', $wpdb->esc_like($prefix_timeout) . '%' ) );
         
         return rest_ensure_response(array('success' => true));
     }

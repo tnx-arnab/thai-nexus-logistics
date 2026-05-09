@@ -38,18 +38,12 @@ class TNX_Order {
      * Auto-create shipment on TNX platform
      */
     public function auto_create_shipment($order_id) {
-        if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
-            error_log("TNX Debug: auto_create_shipment triggered for Order #$order_id");
-        }
         $order = wc_get_order($order_id);
         
         // Check if a TNX rate was selected
         $shipping_methods = $order->get_shipping_methods();
         $tnx_selected = false;
         foreach ($shipping_methods as $method) {
-            if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
-                error_log("TNX Debug: Order Shipping Method ID: " . $method->get_method_id());
-            }
             if (strpos($method->get_method_id(), 'tnx_shipping') !== false) {
                 $tnx_selected = true;
                 break;
@@ -57,17 +51,11 @@ class TNX_Order {
         }
 
         if (!$tnx_selected) {
-            if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
-                error_log("TNX Debug: No TNX shipping method found for Order #$order_id");
-            }
             return;
         }
 
         // Skip if already created
         if ($order->get_meta('_tnx_request_number')) {
-            if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
-                error_log("TNX Debug: Shipment already exists for Order #$order_id");
-            }
             return;
         }
 
@@ -108,9 +96,6 @@ class TNX_Order {
         }
 
         if (empty($tnx_items)) {
-            if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
-                error_log("TNX Debug: No shippable items found for Order #$order_id");
-            }
             return;
         }
 
@@ -119,18 +104,12 @@ class TNX_Order {
         $packing_result = $packer->pack_items($tnx_items);
 
         if ($packing_result->has_errors()) {
-            if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
-                error_log("TNX Debug: Shipment creation aborted for Order #$order_id due to packing errors: " . implode(', ', $packing_result->get_errors()));
-            }
             return;
         }
 
         $packed_boxes = $packing_result->get_all_shipment_boxes();
 
         if (empty($packed_boxes)) {
-            if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
-                error_log("TNX Debug: Box packing failed for Order #$order_id");
-            }
             return;
         }
 
@@ -168,13 +147,7 @@ class TNX_Order {
                 )
             );
 
-            if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
-                error_log("TNX Debug: Creating shipment for box " . ($index + 1) . " with payload: " . json_encode($payload));
-            }
             $response = $api->shipment_crud('create', $payload);
-            if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
-                error_log("TNX Debug: API Response for box " . ($index + 1) . ": " . json_encode($response));
-            }
 
             if (!is_wp_error($response) && isset($response['data']['request_number'])) {
                 $shipments_created[] = $response['data'];
@@ -232,7 +205,7 @@ class TNX_Order {
                 echo '<li style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f1;">';
                 echo '<code style="background: #f0f0f1; padding: 2px 4px; border-radius: 4px;">' . esc_html($shipment['request_number']) . '</code>';
                 echo '<span style="float: right; color: #dc2626; font-weight: bold; font-size: 11px; text-transform: uppercase;">' . esc_html($shipment['status']) . '</span>';
-                echo '<div style="font-size: 11px; color: #64748b; margin-top: 4px;">' . esc_html__('Box', 'thai-nexus-logistics') . ' ' . ($index + 1) . $box_info . '</div>';
+                echo '<div style="font-size: 11px; color: #64748b; margin-top: 4px;">' . esc_html__('Box', 'thai-nexus-logistics') . ' ' . absint($index + 1) . esc_html($box_info) . '</div>';
                 echo '</li>';
             }
             echo '</ul>';

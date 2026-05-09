@@ -24,7 +24,7 @@ class TNX_Debug_Logger {
      * Check if logging is enabled via constant
      */
     public static function is_enabled() {
-        return defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG;
+        return false;
     }
 
     /**

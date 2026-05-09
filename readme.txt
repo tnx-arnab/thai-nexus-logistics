@@ -2,7 +2,7 @@
 Contributors: thainexus
 Tags: shipping, logistics, woocommerce, thailand, currency conversion
 Requires at least: 5.8
-Tested up to: 6.7
+Tested up to: 6.9
 Stable tag: 1.5.3
 Requires PHP: 7.4
 License: GPLv2 or later
@@ -51,7 +51,6 @@ Yes, you need an active account and an API token from [Thai Nexus](https://app.t
 = 1.5.3 =
 * Security: Implemented nonce verification for product metadata saving.
 * Security: Redacted API tokens from debug logs.
-* Compliance: Wrapped all error_log calls in debug checks to prevent log spam.
 * Compliance: Disables debug mode by default for production.
 * Compliance: Improved late-stage escaping for all admin and order displays.
 

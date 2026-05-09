@@ -9,16 +9,12 @@
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Requires at least: 5.8
  * Requires PHP: 7.4
- * Tested up to: 6.7
+ * Tested up to: 6.9
  */
 
 if (!defined('ABSPATH')) exit;
 
-// Temporary Debug Mode (will be removed before release)
-// Temporary Debug Mode (will be removed before release)
-if (!defined('TNX_DEBUG_LOG')) {
-    define('TNX_DEBUG_LOG', false);
-}
+
 
 // Define Constants
 define('TNX_VERSION', '1.5.3');
@@ -30,9 +26,6 @@ if (file_exists(TNX_PLUGIN_DIR . 'vendor/autoload.php')) {
     require_once TNX_PLUGIN_DIR . 'vendor/autoload.php';
 }
 
-if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
-    error_log("TNX Plugin Booting: " . date('Y-m-d H:i:s'));
-}
 
 /**
  * Main Plugin Class
@@ -122,7 +115,7 @@ class Thai_Nexus_Logistics {
         $is_cart = is_cart();
         
         if (defined('REST_REQUEST') && REST_REQUEST) {
-            $request_uri = $_SERVER['REQUEST_URI'] ?? '';
+            $request_uri = isset($_SERVER['REQUEST_URI']) ? esc_url_raw(wp_unslash($_SERVER['REQUEST_URI'])) : '';
             // If it's a store API request for the cart, but NOT for checkout
             if (strpos($request_uri, 'wc/store/v1/cart') !== false && strpos($request_uri, 'checkout') === false) {
                 $is_cart = true;

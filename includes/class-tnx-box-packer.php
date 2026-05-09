@@ -39,14 +39,6 @@ class TNX_Box implements BoxInterface {
         $this->emptyWeight = (float) ($data['empty_weight'] ?? 0.1);
         $this->maxWeight   = (float) ($data['max_weight'] ?? 10);
 
-        if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
-            error_log(sprintf(
-                "TNX Debug Box Init: %s (Inner: %sx%sx%s, Outer: %sx%sx%s)",
-                $this->reference,
-                $this->innerLength, $this->innerWidth, $this->innerDepth,
-                $this->outerLength, $this->outerWidth, $this->outerDepth
-            ));
-        }
     }
 
     public function getReference(): string { return $this->reference; }
@@ -130,16 +122,6 @@ class TNX_Packing_Result {
             ];
             $all[] = $box;
 
-            if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
-                error_log(sprintf(
-                    "TNX Packing: Item '%s' is too large for any box. Using standalone shipment (%sx%sx%s cm, %skg)",
-                    $item->getDescription(),
-                    $box['length'],
-                    $box['width'],
-                    $box['height'],
-                    $box['weight']
-                ));
-            }
         }
         return $all;
     }
@@ -176,10 +158,6 @@ class TNX_Box_Packer {
         }
 
         if (empty($box_definitions)) {
-            // Log a warning that no boxes are defined, even though the algorithm is "always on"
-            if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
-                error_log("TNX Warning: 3D Packing is active but no boxes are defined. Using naive fallback.");
-            }
             return $this->fallback_naive($items);
         }
 
@@ -243,23 +221,9 @@ class TNX_Box_Packer {
                     'items'  => $box_items,
                 ]);
 
-                if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
-                    error_log(sprintf(
-                        "TNX Packing Success: Used Box '%s' (%sx%sx%s cm, %skg) for items: %s",
-                        $box_type->getReference(),
-                        $box_type->getOuterLength() / 10,
-                        $box_type->getOuterWidth() / 10,
-                        $box_type->getOuterDepth() / 10,
-                        $packed_box->getWeight() / 1000,
-                        implode(', ', $box_items)
-                    ));
-                }
             }
             
         } catch (\Exception $e) {
-            if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
-                error_log('TNX Packing Error: ' . $e->getMessage());
-            }
             // If packing fails mid-way, fallback to naive for everything
             return $this->fallback_naive($items);
         }
@@ -282,14 +246,11 @@ class TNX_Box_Packer {
             $wt = (float) $product->get_weight();
 
             if (!$l || !$w || !$h || !$wt) {
-                $error_msg = sprintf(
-                    __('Product "%s" is missing required shipping dimensions or weight.', 'thai-nexus-logistics'),
+                // translators: %s: product name
+                $error_msg = sprintf( __('Product "%s" is missing required shipping dimensions or weight.', 'thai-nexus-logistics'),
                     $product->get_name()
                 );
                 $result->add_error($error_msg);
-                if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
-                    error_log("TNX Validation Error: $error_msg");
-                }
             }
         }
         return $result;
@@ -338,16 +299,6 @@ class TNX_Box_Packer {
                 'items'  => $items_desc,
             ]);
 
-            if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
-                error_log(sprintf(
-                    "TNX Packing Fallback (Naive): Using Standard Package (%sx%sx%s cm, %skg) for items: %s",
-                    $max_length,
-                    $max_width,
-                    $max_height,
-                    $total_weight,
-                    implode(', ', $items_desc)
-                ));
-            }
         }
 
         return $result;
