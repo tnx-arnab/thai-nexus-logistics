@@ -143,7 +143,7 @@ const BoxDefinitionsPage = () => {
                 </div>
                 <button
                   onClick={() => removeBox(index)}
-                  className="text-gray-400 hover:text-red-500 transition-colors p-2"
+                  className="text-gray-400 hover:text-blue-500 transition-colors p-2"
                   title="Remove Box"
                 >
                   <Trash2 size={18} />
@@ -217,7 +217,7 @@ const BoxDefinitionsPage = () => {
             <button
               onClick={handleSave}
               disabled={saving}
-              className="tnx-btn-primary py-3 px-10 text-lg shadow-lg shadow-red-100 disabled:opacity-50"
+              className="tnx-btn-primary py-3 px-10 text-lg shadow-lg shadow-blue-100 disabled:opacity-50"
             >
               {saving ? <Loader2 className="animate-spin" /> : <Save size={20} />}
               {saving ? 'Saving...' : 'Save Box Inventory'}
@@ -225,7 +225,7 @@ const BoxDefinitionsPage = () => {
 
             {message && (
               <div className={`flex items-center gap-2 font-medium px-4 py-2 rounded-lg animate-in fade-in zoom-in duration-300 ${
-                message.type === 'success' ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'
+                message.type === 'success' ? 'text-green-600 bg-green-50' : 'text-blue-600 bg-blue-50'
               }`}>
                 {message.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
                 {message.text}

@@ -76,7 +76,7 @@ const ShipmentsPage = () => {
         return isHeader ? 'bg-green-500/20 text-green-100 border-green-400/30' : 'bg-green-100 text-green-700 border-green-200';
     }
     if (s.includes('cancel') || s.includes('lost')) {
-        return isHeader ? 'bg-red-500/20 text-red-100 border-red-400/30' : 'bg-red-100 text-red-700 border-red-200';
+        return isHeader ? 'bg-blue-500/20 text-blue-100 border-blue-400/30' : 'bg-blue-100 text-blue-700 border-blue-200';
     }
     return isHeader ? 'bg-gray-500/20 text-gray-100 border-gray-400/30' : 'bg-gray-100 text-gray-700 border-gray-200';
   };
@@ -125,7 +125,7 @@ const ShipmentsPage = () => {
               ) : errorType === 'auth' ? (
                 <tr>
                   <td colSpan={5} className="py-16 text-center animate-in fade-in zoom-in duration-300">
-                    <Key className="w-12 h-12 text-red-100 mx-auto mb-4" />
+                    <Key className="w-12 h-12 text-blue-100 mx-auto mb-4" />
                     <h3 className="text-lg font-bold text-secondary">Connection Required</h3>
                     <p className="text-gray-500 mt-1 text-sm max-w-xs mx-auto">
                       Please check your API token in Settings.

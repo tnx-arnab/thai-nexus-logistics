@@ -11,12 +11,12 @@ const Notification = ({ message, type = 'success', onClose, duration = 3000 }) =
 
   const icons = {
     success: <CheckCircle className="text-green-500" size={20} />,
-    error: <AlertCircle className="text-red-500" size={20} />,
+    error: <AlertCircle className="text-blue-500" size={20} />,
   };
 
   const bgColors = {
     success: 'bg-green-50 border-green-100',
-    error: 'bg-red-50 border-red-100',
+    error: 'bg-blue-50 border-blue-100',
   };
 
   return (

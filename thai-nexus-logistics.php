@@ -5,6 +5,8 @@
  * Version: 1.5.2
  * Author: Thai Nexus Logistics
  * Text Domain: thai-nexus-logistics
+ * License: GPL-2.0+
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Requires at least: 5.8
  * Requires PHP: 7.4
  */

@@ -140,7 +140,7 @@ const DebugLogPage = () => {
           </button>
           <button 
             onClick={handleClearLogs} 
-            className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 border border-red-100 rounded-lg hover:bg-red-100 transition-colors text-sm font-medium"
+            className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 border border-blue-100 rounded-lg hover:bg-blue-100 transition-colors text-sm font-medium"
           >
             <Trash2 size={16} />
             Clear Logs
@@ -256,7 +256,7 @@ const DebugLogPage = () => {
                           <div key={idx} className="bg-secondary rounded-xl overflow-hidden border border-gray-800">
                             <div className="bg-gray-800 px-4 py-2 flex justify-between items-center">
                               <span className="text-xs font-mono text-gray-400">Box #{idx + 1} &gt; {call.endpoint}</span>
-                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${call.status === 200 ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${call.status === 200 ? 'bg-green-500/20 text-green-400' : 'bg-blue-500/20 text-blue-400'}`}>
                                 HTTP {call.status}
                               </span>
                             </div>

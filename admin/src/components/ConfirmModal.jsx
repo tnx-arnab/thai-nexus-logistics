@@ -9,7 +9,7 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, confirmText 
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <div className={`p-2 rounded-lg ${variant === 'danger' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-600'}`}>
+            <div className={`p-2 rounded-lg ${variant === 'danger' ? 'bg-blue-50 text-blue-600' : 'bg-amber-50 text-amber-600'}`}>
               <AlertCircle size={24} />
             </div>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
@@ -33,7 +33,7 @@ const ConfirmModal = ({ isOpen, onClose, onConfirm, title, message, confirmText 
             }}
             className={`px-6 py-2 rounded-xl text-sm font-bold text-white shadow-lg transition-all active:scale-95 ${
               variant === 'danger' 
-                ? 'bg-red-500 hover:bg-red-600 shadow-red-200' 
+                ? 'bg-blue-500 hover:bg-blue-600 shadow-blue-200' 
                 : 'bg-amber-500 hover:bg-amber-600 shadow-amber-200'
             }`}
           >

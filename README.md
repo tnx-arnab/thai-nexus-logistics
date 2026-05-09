@@ -38,4 +38,4 @@ Real-time shipping quotations and automated shipment creation via Thai Nexus API
 
 ## 📄 License
 
-This project is proprietary and built for Thai Nexus Logistics.
+This project is licensed under the GPLv2 or later.

@@ -183,12 +183,32 @@ const SettingsPage = () => {
         </div>
       </div>
 
+      {/* Privacy & Data Disclosure */}
+      <div className="tnx-card bg-secondary border-secondary">
+        <div className="bg-secondary border-secondary p-5 flex items-center gap-3 ">
+          <AlertCircle className="text-blue-600 w-6 h-6" />
+          <h2 className="text-lg font-bold text-white">Privacy & Data Disclosure</h2>
+        </div>
+        <div className="p-8">
+          <p className="text-black text-sm leading-relaxed">
+            To provide real-time shipping quotations, this plugin securely transmits package dimensions, 
+            weights, and the <strong>customer's shipping address</strong> (Country, City, State, and Postal Code) 
+            to the <a href="https://app.thainexus.co.th/" target="_blank" className="text-primary hover:underline font-medium"> Thai Nexus API</a>. 
+          </p>
+          <p className="text-black  text-sm mt-4 leading-relaxed">
+            Additionally, it communicates with the <a href="https://www.frankfurter.app/" target="_blank" className="text-primary hover:underline font-medium">Frankfurter API</a> to fetch current exchange 
+            rates for currency conversion. No customer PII (Name, Email, Phone) is sent during the 
+            quotation phase.
+          </p>
+        </div>
+      </div>
+
       {/* Save Button & Feedback */}
       <div className="flex items-center gap-6">
         <button
           type="submit"
           disabled={saving}
-          className="tnx-btn-primary py-3 px-10 text-lg shadow-lg shadow-red-100 disabled:opacity-50"
+          className="tnx-btn-primary py-3 px-10 text-lg shadow-lg shadow-blue-100 disabled:opacity-50"
         >
           {saving ? <Loader2 className="animate-spin" /> : <Save size={20} />}
           {saving ? 'Saving...' : 'Save Settings'}
@@ -196,7 +216,7 @@ const SettingsPage = () => {
 
         {message && (
           <div className={`flex items-center gap-2 font-medium px-4 py-2 rounded-lg animate-in fade-in zoom-in duration-300 ${
-            message.type === 'success' ? 'text-green-600 bg-green-50' : 'text-red-600 bg-red-50'
+            message.type === 'success' ? 'text-green-600 bg-green-50' : 'text-blue-600 bg-blue-50'
           }`}>
             {message.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
             {message.text}
