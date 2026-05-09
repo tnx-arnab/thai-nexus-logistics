@@ -50,7 +50,9 @@ class TNX_Shipping_Method extends WC_Shipping_Method {
             TNX_API::$last_debug_data = array(); // Reset
         }
 
-        error_log("TNX Debug: Calculating shipping for " . count($package['contents']) . " items.");
+        if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
+            error_log("TNX Debug: Calculating shipping for " . count($package['contents']) . " items.");
+        }
         $dest = $package['destination'];
 
         if ($this->enabled === 'no') {
@@ -100,7 +102,9 @@ class TNX_Shipping_Method extends WC_Shipping_Method {
         }
 
         $packed_boxes = $packing_result->get_all_shipment_boxes();
-        error_log("TNX Debug: Packing complete. Boxes to quote: " . count($packed_boxes));
+        if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
+            error_log("TNX Debug: Packing complete. Boxes to quote: " . count($packed_boxes));
+        }
 
         if (empty($packed_boxes)) {
             return;

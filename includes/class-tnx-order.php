@@ -38,14 +38,18 @@ class TNX_Order {
      * Auto-create shipment on TNX platform
      */
     public function auto_create_shipment($order_id) {
-        error_log("TNX Debug: auto_create_shipment triggered for Order #$order_id");
+        if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
+            error_log("TNX Debug: auto_create_shipment triggered for Order #$order_id");
+        }
         $order = wc_get_order($order_id);
         
         // Check if a TNX rate was selected
         $shipping_methods = $order->get_shipping_methods();
         $tnx_selected = false;
         foreach ($shipping_methods as $method) {
-            error_log("TNX Debug: Order Shipping Method ID: " . $method->get_method_id());
+            if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
+                error_log("TNX Debug: Order Shipping Method ID: " . $method->get_method_id());
+            }
             if (strpos($method->get_method_id(), 'tnx_shipping') !== false) {
                 $tnx_selected = true;
                 break;
@@ -53,13 +57,17 @@ class TNX_Order {
         }
 
         if (!$tnx_selected) {
-            error_log("TNX Debug: No TNX shipping method found for Order #$order_id");
+            if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
+                error_log("TNX Debug: No TNX shipping method found for Order #$order_id");
+            }
             return;
         }
 
         // Skip if already created
         if ($order->get_meta('_tnx_request_number')) {
-            error_log("TNX Debug: Shipment already exists for Order #$order_id");
+            if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
+                error_log("TNX Debug: Shipment already exists for Order #$order_id");
+            }
             return;
         }
 
@@ -100,7 +108,9 @@ class TNX_Order {
         }
 
         if (empty($tnx_items)) {
-            error_log("TNX Debug: No shippable items found for Order #$order_id");
+            if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
+                error_log("TNX Debug: No shippable items found for Order #$order_id");
+            }
             return;
         }
 
@@ -109,14 +119,18 @@ class TNX_Order {
         $packing_result = $packer->pack_items($tnx_items);
 
         if ($packing_result->has_errors()) {
-            error_log("TNX Debug: Shipment creation aborted for Order #$order_id due to packing errors: " . implode(', ', $packing_result->get_errors()));
+            if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
+                error_log("TNX Debug: Shipment creation aborted for Order #$order_id due to packing errors: " . implode(', ', $packing_result->get_errors()));
+            }
             return;
         }
 
         $packed_boxes = $packing_result->get_all_shipment_boxes();
 
         if (empty($packed_boxes)) {
-            error_log("TNX Debug: Box packing failed for Order #$order_id");
+            if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
+                error_log("TNX Debug: Box packing failed for Order #$order_id");
+            }
             return;
         }
 
@@ -154,9 +168,13 @@ class TNX_Order {
                 )
             );
 
-            error_log("TNX Debug: Creating shipment for box " . ($index + 1) . " with payload: " . json_encode($payload));
+            if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
+                error_log("TNX Debug: Creating shipment for box " . ($index + 1) . " with payload: " . json_encode($payload));
+            }
             $response = $api->shipment_crud('create', $payload);
-            error_log("TNX Debug: API Response for box " . ($index + 1) . ": " . json_encode($response));
+            if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
+                error_log("TNX Debug: API Response for box " . ($index + 1) . ": " . json_encode($response));
+            }
 
             if (!is_wp_error($response) && isset($response['data']['request_number'])) {
                 $shipments_created[] = $response['data'];

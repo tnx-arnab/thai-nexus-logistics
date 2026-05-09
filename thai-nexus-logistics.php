@@ -14,8 +14,9 @@
 if (!defined('ABSPATH')) exit;
 
 // Temporary Debug Mode (will be removed before release)
+// Temporary Debug Mode (will be removed before release)
 if (!defined('TNX_DEBUG_LOG')) {
-    define('TNX_DEBUG_LOG', true);
+    define('TNX_DEBUG_LOG', false);
 }
 
 // Define Constants
@@ -28,7 +29,9 @@ if (file_exists(TNX_PLUGIN_DIR . 'vendor/autoload.php')) {
     require_once TNX_PLUGIN_DIR . 'vendor/autoload.php';
 }
 
-error_log("TNX Plugin Booting: " . date('Y-m-d H:i:s'));
+if (defined('TNX_DEBUG_LOG') && TNX_DEBUG_LOG) {
+    error_log("TNX Plugin Booting: " . date('Y-m-d H:i:s'));
+}
 
 /**
  * Main Plugin Class
