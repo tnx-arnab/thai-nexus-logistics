@@ -199,14 +199,14 @@ class TNX_Order {
         $packed_boxes = $order->get_meta('_tnx_packed_boxes');
 
         if (!$req_num) {
-            echo '<p>' . __('No TNX shipment associated with this order.', 'thai-nexus-logistics') . '</p>';
+            echo '<p>' . esc_html__('No TNX shipment associated with this order.', 'thai-nexus-logistics') . '</p>';
             return;
         }
 
         echo '<div class="tnx-order-meta" style="font-family: sans-serif;">';
         
         if (!empty($all_shipments) && is_array($all_shipments)) {
-            echo '<p><strong>' . __('Shipments:', 'thai-nexus-logistics') . '</strong></p>';
+            echo '<p><strong>' . esc_html__('Shipments:', 'thai-nexus-logistics') . '</strong></p>';
             echo '<ul style="margin: 0 0 15px 0; padding: 0; list-style: none;">';
             foreach ($all_shipments as $index => $shipment) {
                 $box = $packed_boxes[$index] ?? null;
@@ -214,17 +214,17 @@ class TNX_Order {
                 echo '<li style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f1;">';
                 echo '<code style="background: #f0f0f1; padding: 2px 4px; border-radius: 4px;">' . esc_html($shipment['request_number']) . '</code>';
                 echo '<span style="float: right; color: #dc2626; font-weight: bold; font-size: 11px; text-transform: uppercase;">' . esc_html($shipment['status']) . '</span>';
-                echo '<div style="font-size: 11px; color: #64748b; margin-top: 4px;">' . __('Box', 'thai-nexus-logistics') . ' ' . ($index + 1) . $box_info . '</div>';
+                echo '<div style="font-size: 11px; color: #64748b; margin-top: 4px;">' . esc_html__('Box', 'thai-nexus-logistics') . ' ' . ($index + 1) . $box_info . '</div>';
                 echo '</li>';
             }
             echo '</ul>';
         } else {
-            echo '<p><strong>' . __('Request Number:', 'thai-nexus-logistics') . '</strong> <code style="background: #f0f0f1; padding: 2px 4px; border-radius: 4px;">' . esc_html($req_num) . '</code></p>';
-            echo '<p><strong>' . __('Status:', 'thai-nexus-logistics') . '</strong> <span style="color: #dc2626; font-weight: bold;">' . esc_html($status) . '</span></p>';
+            echo '<p><strong>' . esc_html__('Request Number:', 'thai-nexus-logistics') . '</strong> <code style="background: #f0f0f1; padding: 2px 4px; border-radius: 4px;">' . esc_html($req_num) . '</code></p>';
+            echo '<p><strong>' . esc_html__('Status:', 'thai-nexus-logistics') . '</strong> <span style="color: #dc2626; font-weight: bold;">' . esc_html($status) . '</span></p>';
         }
 
         echo '<hr />';
-        echo '<a href="' . admin_url('admin.php?page=tnx-logistics') . '" class="button button-primary" style="background: #272262; border-color: #272262; width: 100%; text-align: center;">' . __('View in Dashboard', 'thai-nexus-logistics') . '</a>';
+        echo '<a href="' . esc_url(admin_url('admin.php?page=tnx-logistics')) . '" class="button button-primary" style="background: #272262; border-color: #272262; width: 100%; text-align: center;">' . esc_html__('View in Dashboard', 'thai-nexus-logistics') . '</a>';
         echo '</div>';
     }
 }

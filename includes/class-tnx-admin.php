@@ -84,7 +84,7 @@ class TNX_Admin {
         } else {
             // Fallback/Warning if not built yet
             add_action('admin_notices', function() {
-                echo '<div class="error"><p>' . __('Thai Nexus Logistics: Admin assets not found. Please run `npm run build` in the `admin` directory.', 'thai-nexus-logistics') . '</p></div>';
+                echo '<div class="error"><p>' . esc_html__('Thai Nexus Logistics: Required admin assets not found. Please contact support.', 'thai-nexus-logistics') . '</p></div>';
             });
         }
     }

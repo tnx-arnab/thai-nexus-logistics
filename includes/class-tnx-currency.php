@@ -92,8 +92,9 @@ class TNX_Currency {
         $usd_price_formatted = '$' . number_format($usd_price, 2);
 
         $append_html = sprintf(
-            ' <span class="tnx-usd-price" style="font-size: 0.8em; color: #666;">(USD %s)</span>',
-            $usd_price_formatted
+            ' <span class="tnx-usd-price" style="font-size: 0.8em; color: #666;">(%s %s)</span>',
+            esc_html__('USD', 'thai-nexus-logistics'),
+            esc_html($usd_price_formatted)
         );
 
         return $price_html . $append_html;

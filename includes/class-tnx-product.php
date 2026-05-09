@@ -39,7 +39,15 @@ class TNX_Product {
      * Save Product Shipping fields
      */
     public function save_shipping_fields($post_id) {
+        // Verify nonce
+        if (!isset($_POST['_wpnonce']) || !wp_verify_nonce($_POST['_wpnonce'], 'update-post_' . $post_id)) {
+            // Check for WooCommerce's own nonce if standard one is not present
+            if (!isset($_POST['woocommerce_meta_nonce']) || !wp_verify_nonce($_POST['woocommerce_meta_nonce'], 'woocommerce_save_data')) {
+                return;
+            }
+        }
+
         $is_document = isset($_POST['_tnx_is_document']) ? 'yes' : 'no';
-        update_post_meta($post_id, '_tnx_is_document', $is_document);
+        update_post_meta($post_id, '_tnx_is_document', sanitize_text_field($is_document));
     }
 }

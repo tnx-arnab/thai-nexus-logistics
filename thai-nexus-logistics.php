@@ -245,7 +245,7 @@ class Thai_Nexus_Logistics {
     public function woocommerce_missing_notice() {
         ?>
         <div class="error">
-            <p><?php _e('Thai Nexus Logistics requires WooCommerce to be installed and active.', 'thai-nexus-logistics'); ?></p>
+            <p><?php esc_html_e('Thai Nexus Logistics requires WooCommerce to be installed and active.', 'thai-nexus-logistics'); ?></p>
         </div>
         <?php
     }

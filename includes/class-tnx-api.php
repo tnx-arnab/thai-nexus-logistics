@@ -88,9 +88,13 @@ class TNX_API {
         $body        = json_decode($body_raw, true);
 
         if (TNX_Debug_Logger::is_enabled()) {
+            $log_payload = $payload;
+            if (isset($log_payload['api_token'])) {
+                $log_payload['api_token'] = '[REDACTED]';
+            }
             self::$last_debug_data[] = array(
                 'endpoint' => $endpoint,
-                'payload'  => $payload,
+                'payload'  => $log_payload,
                 'response' => $body ?: $body_raw,
                 'status'   => $status_code,
             );
