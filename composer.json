@@ -1,0 +1,7 @@
+{
+    "name": "thainexus/thai-nexus-logistics",
+    "license": "GPL-2.0-or-later",
+    "require": {
+        "dvdoug/boxpacker": "^4.0"
+    }
+}
