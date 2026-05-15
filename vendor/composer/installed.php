@@ -1,0 +1,41 @@
+<?php return array(
+    'root' => array(
+        'name' => 'thainexus/thai-nexus-logistics',
+        'pretty_version' => 'dev-master',
+        'version' => 'dev-master',
+        'reference' => 'c3684859ee067328625aa7437ca24af1d6e4df02',
+        'type' => 'library',
+        'install_path' => __DIR__ . '/../../',
+        'aliases' => array(),
+        'dev' => true,
+    ),
+    'versions' => array(
+        'dvdoug/boxpacker' => array(
+            'pretty_version' => '4.1.1',
+            'version' => '4.1.1.0',
+            'reference' => '100cec65b57c189bc528823583125d1550da36f9',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../dvdoug/boxpacker',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'psr/log' => array(
+            'pretty_version' => '3.0.2',
+            'version' => '3.0.2.0',
+            'reference' => 'f16e1d5863e37f8d8c2a01719f5b34baa2b714d3',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../psr/log',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+        'thainexus/thai-nexus-logistics' => array(
+            'pretty_version' => 'dev-master',
+            'version' => 'dev-master',
+            'reference' => 'c3684859ee067328625aa7437ca24af1d6e4df02',
+            'type' => 'library',
+            'install_path' => __DIR__ . '/../../',
+            'aliases' => array(),
+            'dev_requirement' => false,
+        ),
+    ),
+);
