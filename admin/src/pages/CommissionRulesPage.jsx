@@ -1,150 +1,7 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Save, Plus, Trash2, Search, X, CheckCircle2, AlertCircle, Loader2, DollarSign, Package } from 'lucide-react';
+import { useCallback, useState, useEffect } from 'react';
+import { Save, Plus, Trash2, CheckCircle2, AlertCircle, Loader2, DollarSign } from 'lucide-react';
 import axios from 'axios';
-import { clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...inputs) {
-  return twMerge(clsx(inputs));
-}
-
-const ProductSearchSelect = ({ selectedProducts, onChange }) => {
-  const [search, setSearch] = useState('');
-  const [results, setResults] = useState([]);
-  const [searching, setSearching] = useState(false);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [selectedDetails, setSelectedDetails] = useState([]);
-  const dropdownRef = useRef(null);
-
-  useEffect(() => {
-    // Fetch details for already selected products if needed (simplified for MVP: just show IDs if no details)
-    if (selectedProducts.length > 0 && selectedDetails.length === 0) {
-      setSelectedDetails(selectedProducts.map(id => ({ id, name: `Product #${id}` })));
-    }
-  }, [selectedProducts]);
-
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-        setShowDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
-      if (search) {
-        performSearch(search);
-      } else {
-        setResults([]);
-      }
-    }, 500);
-    return () => clearTimeout(delayDebounceFn);
-  }, [search]);
-
-  const performSearch = async (query) => {
-    setSearching(true);
-    try {
-      // @ts-ignore
-      const response = await axios.get(`${window.tnxlData.apiUrl}/search-products?search=${encodeURIComponent(query)}`, {
-        // @ts-ignore
-        headers: { 'X-WP-Nonce': window.tnxlData.nonce }
-      });
-      setResults(response.data);
-    } catch (error) {
-      console.error("Search failed", error);
-    } finally {
-      setSearching(false);
-    }
-  };
-
-  const handleSelect = (product) => {
-    if (!selectedProducts.includes(product.id)) {
-      onChange([...selectedProducts, product.id]);
-      setSelectedDetails([...selectedDetails, product]);
-    }
-    setSearch('');
-    setShowDropdown(false);
-  };
-
-  const handleRemove = (id) => {
-    onChange(selectedProducts.filter(pId => pId !== id));
-    setSelectedDetails(selectedDetails.filter(p => p.id !== id));
-  };
-
-  return (
-    <div className="relative" ref={dropdownRef}>
-      <div className="flex flex-wrap gap-2 mb-3">
-        {selectedDetails.map(p => (
-          <span key={p.id} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-primary/5 text-primary text-xs font-semibold border border-primary/20 animate-in fade-in zoom-in duration-200">
-            {p.name}
-            <button 
-              type="button" 
-              onClick={() => handleRemove(p.id)} 
-              className="hover:bg-primary/10 rounded-full p-0.5 transition-colors"
-            >
-              <X size={12} />
-            </button>
-          </span>
-        ))}
-      </div>
-      <div className="relative">
-        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-          {searching ? <Loader2 size={16} className="text-gray-400 animate-spin" /> : <Search size={16} className="text-gray-400" />}
-        </div>
-        <input
-          type="text"
-          className="tnxl-input !pl-12"
-          placeholder="Search products to add..."
-          value={search}
-          onChange={(e) => {
-            setSearch(e.target.value);
-            setShowDropdown(true);
-          }}
-          onFocus={() => setShowDropdown(true)}
-        />
-      </div>
-      
-      {showDropdown && (search || results.length > 0) && (
-        <div className="absolute z-[100] mt-2 w-full bg-white shadow-xl rounded-xl border border-gray-100 py-2 max-h-72 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
-          {searching && results.length === 0 ? (
-            <div className="px-4 py-8 text-center">
-              <Loader2 size={24} className="text-primary animate-spin mx-auto mb-2 opacity-20" />
-              <p className="text-sm text-gray-400">Searching products...</p>
-            </div>
-          ) : results.length === 0 && search ? (
-            <div className="px-4 py-8 text-center">
-              <Search size={24} className="text-gray-300 mx-auto mb-2" />
-              <p className="text-sm text-gray-400">No products found for "{search}"</p>
-            </div>
-          ) : (
-            results.map((product) => (
-              <button
-                key={product.id}
-                type="button"
-                className="w-full text-left px-4 py-3 hover:bg-gray-50 flex items-center gap-3 transition-colors border-b border-gray-50 last:border-0"
-                onClick={() => handleSelect(product)}
-              >
-                <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-gray-400 shrink-0">
-                   <Package size={18} />
-                </div>
-                <div className="flex flex-col min-w-0">
-                  <span className="font-semibold text-gray-900 truncate">{product.name}</span>
-                  <div className="flex items-center gap-2">
-                    {product.sku && <span className="text-gray-400 text-[10px] uppercase tracking-wider font-bold">SKU: {product.sku}</span>}
-                    <span className="text-gray-400 text-[10px] uppercase tracking-wider font-bold">ID: {product.id}</span>
-                  </div>
-                </div>
-              </button>
-            ))
-          )}
-        </div>
-      )}
-    </div>
-  );
-};
+import ProductSearchSelect from '../components/ProductSearchSelect';
 
 const CommissionRulesPage = () => {
   const [loading, setLoading] = useState(false);
@@ -153,11 +10,7 @@ const CommissionRulesPage = () => {
   const [rules, setRules] = useState([]);
   const [currencySymbol, setCurrencySymbol] = useState('฿');
 
-  useEffect(() => {
-    fetchSettings();
-  }, []);
-
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async () => {
     setLoading(true);
     try {
       // @ts-ignore
@@ -172,7 +25,12 @@ const CommissionRulesPage = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    const timeoutId = window.setTimeout(fetchSettings, 0);
+    return () => window.clearTimeout(timeoutId);
+  }, [fetchSettings]);
 
   const handleSave = async (e) => {
     e.preventDefault();
@@ -186,7 +44,7 @@ const CommissionRulesPage = () => {
       });
       setMessage({ type: 'success', text: 'Rules saved successfully!' });
       setTimeout(() => setMessage(null), 3000);
-    } catch (error) {
+    } catch {
       setMessage({ type: 'error', text: 'Failed to save rules. Please try again.' });
     } finally {
       setSaving(false);

@@ -27,7 +27,7 @@ class TNXL_Commission {
      * @return float Total commission amount
      */
     public function get_total_commission() {
-        if (!isset(WC()->cart)) {
+        if (!TNXL_Settings::can_fetch_checkout_rates() || !function_exists('WC') || !WC()->cart) {
             return 0;
         }
 

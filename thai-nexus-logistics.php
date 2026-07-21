@@ -1,32 +1,53 @@
 <?php
 /**
- * Plugin Name: Thai Nexus Logistics
- * Description: Automate your global exports with Thai Nexus Logistics for WooCommerce, featuring real-time API rates and 3D box calculation to ensure precise international shipping costs from Thailand to the world.
- * Version: 1.5.3
+ * Plugin Name: Thai Nexus Logistics - International Shipping Rates & Currency Converter for WooCommerce
+ * Description: Real-time WooCommerce shipping rates, automated shipments, and multi-currency conversion for Thailand and international orders via the Thai Nexus API.
+ * Version: 1.5.11
  * Author: Thai Nexus
  * Author URI: https://app.thainexus.co.th
  * Text Domain: thai-nexus-logistics
  * License: GPL-2.0+
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Requires at least: 5.8
- * Requires PHP: 7.4
- * Tested up to: 6.9
+ * Requires PHP: 8.2
+ * Tested up to: 7.0
  */
 
 if (!defined('ABSPATH')) exit;
 
-
-
-// Define Constants
-define('TNXL_VERSION', '1.5.3');
+// Release line: stay on 1.5.x (patch) until explicitly approved for 1.6+.
+define('TNXL_VERSION', '1.5.11');
 define('TNXL_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('TNXL_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('TNXL_DEBUG', false);
 
-// Load Composer Autoloader
-if (file_exists(TNXL_PLUGIN_DIR . 'vendor/autoload.php')) {
-    require_once TNXL_PLUGIN_DIR . 'vendor/autoload.php';
+if (version_compare(PHP_VERSION, '8.2.0', '<')) {
+    add_action('admin_notices', static function () {
+        echo '<div class="error"><p>';
+        echo esc_html(sprintf(
+            /* translators: %s: PHP version number */
+            __('Thai Nexus Logistics requires PHP 8.2 or higher. Your server is running PHP %s.', 'thai-nexus-logistics'),
+            PHP_VERSION
+        ));
+        echo '</p></div>';
+    });
+    return;
 }
+
+$tnxl_autoload = TNXL_PLUGIN_DIR . 'vendor/autoload.php';
+if (!is_readable($tnxl_autoload)) {
+    add_action('admin_notices', static function () {
+        echo '<div class="error"><p>';
+        esc_html_e(
+            'Thai Nexus Logistics is missing its vendor directory. Reinstall the plugin from a complete package.',
+            'thai-nexus-logistics'
+        );
+        echo '</p></div>';
+    });
+    return;
+}
+
+require_once $tnxl_autoload;
 
 
 
@@ -49,11 +70,54 @@ class Thai_Nexus_Logistics {
         // Load dependencies
         $this->load_dependencies();
         
-        // Initialize hooks
-        add_action('plugins_loaded', array($this, 'init'));
+        // Initialize hooks (priority 20 — after WooCommerce loads on plugins_loaded).
+        add_action('plugins_loaded', array($this, 'init'), 20);
+        add_action('admin_init', array($this, 'handle_dismiss_admin_notice'));
+    }
+
+    /**
+     * Whether WooCommerce is installed and active.
+     */
+    private function is_woocommerce_active() {
+        if (class_exists('WooCommerce')) {
+            return true;
+        }
+
+        if (!function_exists('is_plugin_active')) {
+            require_once ABSPATH . 'wp-admin/includes/plugin.php';
+        }
+
+        return is_plugin_active('woocommerce/woocommerce.php');
+    }
+
+    /**
+     * Persist dismissal of admin notices (per user).
+     */
+    public function handle_dismiss_admin_notice() {
+        if (!isset($_GET['tnxl_dismiss']) || !isset($_GET['_wpnonce'])) {
+            return;
+        }
+
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        if (!wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['_wpnonce'])), 'tnxl_dismiss_notice')) {
+            return;
+        }
+
+        $notice = sanitize_key(wp_unslash($_GET['tnxl_dismiss']));
+        if ($notice === 'woocommerce') {
+            update_user_meta(get_current_user_id(), 'tnxl_dismiss_woocommerce_notice', '1');
+        }
+
+        wp_safe_redirect(remove_query_arg(array('tnxl_dismiss', '_wpnonce')));
+        exit;
     }
 
     private function load_dependencies() {
+        require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-settings.php';
+        TNXL_Settings::init();
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-migration.php';
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-api.php';
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-admin.php';
@@ -67,12 +131,13 @@ class Thai_Nexus_Logistics {
         // Start Migration
         TNXL_Migration::get_instance();
 
-        // Check if WooCommerce is active
-        if (!class_exists('Commerce')) {
-            // Check for WooCommerce (different versions might have different class names but class_exists('WooCommerce') is standard)
-        }
-        if (!class_exists('WooCommerce')) {
+        if (!$this->is_woocommerce_active()) {
             add_action('admin_notices', array($this, 'woocommerce_missing_notice'));
+            return;
+        }
+
+        if (!class_exists('DVDoug\BoxPacker\Packer')) {
+            add_action('admin_notices', array($this, 'boxpacker_missing_notice'));
             return;
         }
 
@@ -83,36 +148,37 @@ class Thai_Nexus_Logistics {
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-order.php';
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-commission.php';
 
-        // Initialize Classes
+        // Initialize Classes (admin always available)
         TNXL_API::get_instance();
         TNXL_Admin::get_instance();
         TNXL_REST_API::get_instance();
         TNXL_Product::get_instance();
-        TNXL_Box_Packer::get_instance();
         TNXL_Order::get_instance();
-        TNXL_Currency::get_instance();
-        TNXL_Commission::get_instance();
 
-        // Register Shipping Method
-        add_filter('woocommerce_shipping_methods', array($this, 'register_shipping_method'));
+        if (!TNXL_Settings::are_services_active()) {
+            add_action('admin_notices', array($this, 'api_token_missing_notice'));
+            return;
+        }
 
-        // Disable shipping rate caching for testing/real-time updates
-        add_filter('transient_shipping-transient-version', function() { return time(); });
-        
-        // Force recalculation when destination changes
-        add_filter('woocommerce_cart_shipping_packages', array($this, 'force_shipping_recalculation'));
-        add_action('woocommerce_checkout_update_order_review', array($this, 'force_refresh_shipping'));
-        
-        // WooCommerce Blocks / Store API support
-        add_action('woocommerce_store_api_cart_update_customer_from_request', array($this, 'force_refresh_shipping'), 10, 2);
-        add_action('woocommerce_blocks_loaded', array($this, 'register_block_integration'));
-        add_action('wp_enqueue_scripts', array($this, 'enqueue_block_scripts'));
+        TNXL_Box_Packer::get_instance();
 
-        // Global Injection: Bypass Zones entirely
-        add_filter('woocommerce_package_rates', array($this, 'inject_global_rates'), 99, 2);
+        $needs_shipping_method = TNXL_Settings::can_fetch_checkout_rates()
+            || TNXL_Settings::is_auto_shipment_enabled();
+        if ($needs_shipping_method) {
+            add_filter('woocommerce_shipping_methods', array($this, 'register_shipping_method'));
+        }
 
-        // Explicitly hide shipping calculation on cart page
-        add_filter('woocommerce_cart_ready_to_calc_shipping', array($this, 'maybe_hide_shipping_on_cart'), 99);
+        if (TNXL_Settings::can_fetch_checkout_rates()) {
+            TNXL_Currency::get_instance();
+            TNXL_Commission::get_instance();
+
+            add_filter('woocommerce_cart_shipping_packages', array($this, 'force_shipping_recalculation'));
+            add_action('woocommerce_checkout_update_order_review', array($this, 'force_refresh_shipping'));
+            add_action('woocommerce_store_api_cart_update_customer_from_request', array($this, 'force_refresh_shipping'), 10, 2);
+            add_action('woocommerce_blocks_loaded', array($this, 'register_block_integration'));
+            add_filter('woocommerce_package_rates', array($this, 'inject_global_rates'), 99, 2);
+            add_filter('woocommerce_cart_ready_to_calc_shipping', array($this, 'maybe_hide_shipping_on_cart'), 99);
+        }
     }
 
     /**
@@ -137,28 +203,40 @@ class Thai_Nexus_Logistics {
     }
 
     public function inject_global_rates($rates, $package) {
+        if (!TNXL_Settings::can_fetch_checkout_rates()) {
+            return $rates;
+        }
+
         // Double check: if we are in cart context, don't inject rates
         if ($this->maybe_hide_shipping_on_cart(true) === false) {
             return $rates;
         }
 
-        $shipping_method = new TNXL_Shipping_Method();
-        if ($shipping_method->enabled === 'no') {
-            return $rates;
-        }
+        try {
+            $shipping_method = new TNXL_Shipping_Method();
+            if ($shipping_method->enabled === 'no') {
+                return $rates;
+            }
 
-        // Manually trigger calculation
-        $shipping_method->calculate_shipping($package);
-        $new_rates = $shipping_method->rates;
+            $shipping_method->calculate_shipping($package);
+            $new_rates = $shipping_method->rates;
 
-        if (!empty($new_rates)) {
-            $rates = array_merge($rates, $new_rates);
+            if (!empty($new_rates)) {
+                $rates = array_merge($rates, $new_rates);
+            }
+        } catch (\Throwable $e) {
+            if (defined('TNXL_DEBUG') && TNXL_DEBUG) {
+                error_log('TNXL inject_global_rates: ' . $e->getMessage());
+            }
         }
 
         return $rates;
     }
 
     public function force_shipping_recalculation($packages) {
+        if (!TNXL_Settings::can_fetch_checkout_rates()) {
+            return $packages;
+        }
 
         $request_address = array();
         
@@ -187,8 +265,8 @@ class Thai_Nexus_Logistics {
 
             }
             
-            // Create a robust hash of the entire destination to force recalculation
-            $packages[$i]['tnxl_dest_hash'] = md5(json_encode($packages[$i]['destination']) . microtime());
+            // Stable hash when destination changes (avoid microtime — it busts cache every request).
+            $packages[$i]['tnxl_dest_hash'] = md5(wp_json_encode($packages[$i]['destination'] ?? array()));
         }
         return $packages;
     }
@@ -197,26 +275,30 @@ class Thai_Nexus_Logistics {
      * Force WooCommerce to recalculate shipping
      */
     public function force_refresh_shipping() {
-
-        if (isset(WC()->cart)) {
-            // Clear all shipping-related caches in session and transients
-            WC()->session->set('shipping_responses', array());
-            WC()->session->set('chosen_shipping_methods', array());
-            
-            // Force customer data to be synced
-            WC()->customer->save();
-            
-            // Recalculate
-            WC()->cart->calculate_shipping();
-            WC()->cart->calculate_totals();
+        if (!TNXL_Settings::can_fetch_checkout_rates()) {
+            return;
         }
+
+        if (!function_exists('WC')) {
+            return;
+        }
+
+        $wc = WC();
+        if (!$wc->cart || !$wc->session) {
+            return;
+        }
+
+        // Recalculate only — do not clear chosen_shipping_methods (breaks checkout selection).
+        $wc->cart->calculate_shipping();
+        $wc->cart->calculate_totals();
     }
 
     public function register_block_integration() {
-        if (!class_exists('Automattic\WooCommerce\Blocks\Package')) {
+        if (!class_exists('Automattic\WooCommerce\Blocks\Package')
+            || !interface_exists('Automattic\WooCommerce\Blocks\Integrations\IntegrationInterface')) {
             return;
         }
-        
+
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-checkout-block-integration.php';
         
         add_action('woocommerce_register_main_checkout_block_integration', function($integration_registry) {
@@ -225,20 +307,17 @@ class Thai_Nexus_Logistics {
 
         // Expose commission breakdown to Store API (Checkout Blocks)
         add_filter('woocommerce_store_api_cart_extensions', function($extensions) {
+            if (!TNXL_Settings::can_fetch_checkout_rates()) {
+                return $extensions;
+            }
+            if (!is_array($extensions)) {
+                $extensions = array();
+            }
             $extensions['tnxl-shipping'] = array(
                 'commission' => TNXL_Commission::get_instance()->get_total_commission(),
             );
             return $extensions;
         });
-    }
-
-    /**
-     * Fail-safe script enqueuing for the Checkout Block
-     */
-    public function enqueue_block_scripts() {
-        // Enqueueing is handled by TNXL_Checkout_Block_Integration for Checkout Blocks.
-        // For classic checkout, we could enqueue a separate script if needed, 
-        // but for now, we'll avoid duplicate registration warnings.
     }
 
     public function register_shipping_method($methods) {
@@ -247,9 +326,88 @@ class Thai_Nexus_Logistics {
     }
 
     public function woocommerce_missing_notice() {
+        if ($this->is_woocommerce_active()) {
+            return;
+        }
+
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        if (get_user_meta(get_current_user_id(), 'tnxl_dismiss_woocommerce_notice', true)) {
+            return;
+        }
+
+        $dismiss_url = wp_nonce_url(
+            add_query_arg('tnxl_dismiss', 'woocommerce', admin_url()),
+            'tnxl_dismiss_notice'
+        );
+        ?>
+        <div class="notice notice-warning is-dismissible tnxl-wc-missing-notice" data-dismiss-url="<?php echo esc_url($dismiss_url); ?>">
+            <p>
+                <?php esc_html_e('Thai Nexus Logistics requires WooCommerce to be installed and active.', 'thai-nexus-logistics'); ?>
+                <a href="<?php echo esc_url(admin_url('plugin-install.php?s=woocommerce&tab=search&type=term')); ?>" class="button button-small" style="margin-left: 8px;">
+                    <?php esc_html_e('Install WooCommerce', 'thai-nexus-logistics'); ?>
+                </a>
+                <a href="<?php echo esc_url($dismiss_url); ?>" class="button button-small" style="margin-left: 4px;">
+                    <?php esc_html_e('Dismiss', 'thai-nexus-logistics'); ?>
+                </a>
+            </p>
+        </div>
+        <script>
+        (function () {
+            document.addEventListener('click', function (event) {
+                var notice = event.target.closest('.tnxl-wc-missing-notice');
+                if (!notice) {
+                    return;
+                }
+                var dismissButton = event.target.closest('.notice-dismiss');
+                if (!dismissButton || !notice.dataset.dismissUrl) {
+                    return;
+                }
+                fetch(notice.dataset.dismissUrl, { method: 'GET', credentials: 'same-origin' });
+            });
+        })();
+        </script>
+        <?php
+    }
+
+    public function boxpacker_missing_notice() {
         ?>
         <div class="error">
-            <p><?php esc_html_e('Thai Nexus Logistics requires WooCommerce to be installed and active.', 'thai-nexus-logistics'); ?></p>
+            <p><?php esc_html_e('Thai Nexus Logistics could not load the BoxPacker library. Reinstall the plugin from a complete package.', 'thai-nexus-logistics'); ?></p>
+        </div>
+        <?php
+    }
+
+    public function api_token_missing_notice() {
+        if (!current_user_can('manage_options')) {
+            return;
+        }
+
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+        if ($screen) {
+            $show = ($screen->id === 'toplevel_page_tnxl-logistics')
+                || str_contains((string) $screen->id, 'woocommerce')
+                || str_contains((string) $screen->id, 'wc-');
+            if (!$show) {
+                return;
+            }
+        }
+        ?>
+        <div class="notice notice-warning">
+            <p>
+                <?php
+                echo wp_kses(
+                    sprintf(
+                        /* translators: %s: settings admin URL */
+                        __('Thai Nexus Logistics is inactive until you add your API token in <a href="%s">Settings</a>.', 'thai-nexus-logistics'),
+                        esc_url(admin_url('admin.php?page=tnxl-logistics'))
+                    ),
+                    array('a' => array('href' => array()))
+                );
+                ?>
+            </p>
         </div>
         <?php
     }

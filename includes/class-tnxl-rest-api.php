@@ -59,6 +59,24 @@ class TNXL_REST_API {
             'permission_callback' => array($this, 'check_permission'),
         ));
 
+        register_rest_route('tnxl/v1', '/products', array(
+            'methods'             => 'GET',
+            'callback'            => array($this, 'get_products_by_ids'),
+            'permission_callback' => array($this, 'check_permission'),
+        ));
+
+        register_rest_route('tnxl/v1', '/shipping-services', array(
+            'methods'             => 'GET',
+            'callback'            => array($this, 'get_shipping_services'),
+            'permission_callback' => array($this, 'check_permission'),
+        ));
+
+        register_rest_route('tnxl/v1', '/check-connection', array(
+            'methods'             => 'POST',
+            'callback'            => array($this, 'check_connection'),
+            'permission_callback' => array($this, 'check_permission'),
+        ));
+
         register_rest_route('tnxl/v1', '/shipments/(?P<request_number>[a-zA-Z0-9-]+)', array(
             'methods'             => 'GET',
             'callback'            => array($this, 'get_shipment_details'),
@@ -92,10 +110,18 @@ class TNXL_REST_API {
     }
 
     public function get_settings() {
+        $currency_symbol = '$';
+        if (function_exists('get_woocommerce_currency_symbol')) {
+            $currency_symbol = html_entity_decode(get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8');
+        }
+
         return array(
-            'api_token' => get_option('tnxl_api_token', ''),
+            'api_token' => TNXL_Settings::get_api_token(),
+            'features'  => TNXL_Settings::get_features(),
             'commission_rules' => get_option('tnxl_commission_rules', array()),
-            'currency_symbol' => html_entity_decode(get_woocommerce_currency_symbol(), ENT_QUOTES, 'UTF-8'),
+            'disabled_service_ids' => TNXL_Settings::get_disabled_service_ids(),
+            'shipping_ineligible_product_ids' => TNXL_Settings::get_ineligible_product_ids(),
+            'currency_symbol' => $currency_symbol,
             'shipper'   => array(
                 'name'        => get_option('tnxl_shipper_name', ''),
                 'phone'       => get_option('tnxl_shipper_phone', ''),
@@ -111,19 +137,40 @@ class TNXL_REST_API {
     public function save_settings($request) {
         $params = $request->get_params();
 
-        if (isset($params['api_token'])) {
-            update_option('tnxl_api_token', sanitize_text_field($params['api_token']));
+        if (array_key_exists('api_token', $params)) {
+            update_option('tnxl_api_token', sanitize_text_field(trim((string) $params['api_token'])));
         }
 
-        if (isset($params['shipper'])) {
+        if (isset($params['shipper']) && is_array($params['shipper'])) {
             $shipper = $params['shipper'];
-            update_option('tnxl_shipper_name', sanitize_text_field($shipper['name']));
-            update_option('tnxl_shipper_phone', sanitize_text_field($shipper['phone']));
-            update_option('tnxl_shipper_address', sanitize_textarea_field($shipper['address']));
-            update_option('tnxl_shipper_city', sanitize_text_field($shipper['city']));
-            update_option('tnxl_shipper_state', sanitize_text_field(isset($shipper['state']) ? $shipper['state'] : ''));
-            update_option('tnxl_shipper_postal_code', sanitize_text_field(isset($shipper['postal_code']) ? $shipper['postal_code'] : ''));
-            update_option('tnxl_shipper_country', sanitize_text_field($shipper['country']));
+            $shipper_fields = array(
+                'name'        => array('tnxl_shipper_name', 'sanitize_text_field'),
+                'phone'       => array('tnxl_shipper_phone', 'sanitize_text_field'),
+                'address'     => array('tnxl_shipper_address', 'sanitize_textarea_field'),
+                'city'        => array('tnxl_shipper_city', 'sanitize_text_field'),
+                'state'       => array('tnxl_shipper_state', 'sanitize_text_field'),
+                'postal_code' => array('tnxl_shipper_postal_code', 'sanitize_text_field'),
+                'country'     => array('tnxl_shipper_country', 'sanitize_text_field'),
+            );
+
+            foreach ($shipper_fields as $key => $field) {
+                if (!array_key_exists($key, $shipper)) {
+                    continue;
+                }
+                update_option($field[0], call_user_func($field[1], $shipper[$key]));
+            }
+        }
+
+        if (isset($params['features']) && is_array($params['features'])) {
+            TNXL_Settings::save_features($params['features']);
+        }
+
+        if (isset($params['disabled_service_ids']) && is_array($params['disabled_service_ids'])) {
+            TNXL_Settings::save_disabled_service_ids($params['disabled_service_ids']);
+        }
+
+        if (isset($params['shipping_ineligible_product_ids']) && is_array($params['shipping_ineligible_product_ids'])) {
+            TNXL_Settings::save_ineligible_product_ids($params['shipping_ineligible_product_ids']);
         }
 
         if (isset($params['commission_rules'])) {
@@ -148,7 +195,52 @@ class TNXL_REST_API {
         return rest_ensure_response(array('success' => true));
     }
 
+    public function get_shipping_services() {
+        $services = TNXL_API::get_instance()->get_shipping_services();
+        if (is_wp_error($services)) {
+            return new WP_Error(
+                'tnxl_services_error',
+                $services->get_error_message(),
+                array(
+                    'status' => $services->get_error_code() === 'tnxl_not_configured'
+                        ? 400
+                        : 502,
+                )
+            );
+        }
+
+        return rest_ensure_response(array('services' => $services));
+    }
+
+    public function check_connection($request) {
+        $token = trim((string) $request->get_param('api_token'));
+        if ($token === '') {
+            $token = TNXL_Settings::get_api_token();
+        }
+
+        $result = TNXL_API::get_instance()->test_connection($token);
+        if (is_wp_error($result)) {
+            return rest_ensure_response(array(
+                'valid'   => false,
+                'message' => $result->get_error_message(),
+            ));
+        }
+
+        return rest_ensure_response(array(
+            'valid'   => true,
+            'message' => __('Connected to Thai Nexus.', 'thai-nexus-logistics'),
+        ));
+    }
+
     public function get_shipments($request) {
+        if (!TNXL_Settings::are_services_active()) {
+            return new WP_Error(
+                'tnxl_not_configured',
+                __('Thai Nexus API token is not configured.', 'thai-nexus-logistics'),
+                array('status' => 403)
+            );
+        }
+
         $page = $request->get_param('page') ?: 1;
         $limit = $request->get_param('limit') ?: 10;
 
@@ -166,6 +258,14 @@ class TNXL_REST_API {
     }
 
     public function get_shipment_details($request) {
+        if (!TNXL_Settings::are_services_active()) {
+            return new WP_Error(
+                'tnxl_not_configured',
+                __('Thai Nexus API token is not configured.', 'thai-nexus-logistics'),
+                array('status' => 403)
+            );
+        }
+
         $request_number = $request['request_number'];
 
         $api = TNXL_API::get_instance();
@@ -205,6 +305,27 @@ class TNXL_REST_API {
             }
         }
         
+        return rest_ensure_response($products);
+    }
+
+    public function get_products_by_ids($request) {
+        $raw_ids = (string) $request->get_param('ids');
+        $ids = array_values(array_unique(array_filter(array_map('absint', explode(',', $raw_ids)))));
+        $products = array();
+
+        foreach (array_slice($ids, 0, 100) as $id) {
+            $product = wc_get_product($id);
+            if (!$product) {
+                continue;
+            }
+
+            $products[] = array(
+                'id'   => $product->get_id(),
+                'name' => $product->get_name(),
+                'sku'  => $product->get_sku(),
+            );
+        }
+
         return rest_ensure_response($products);
     }
 

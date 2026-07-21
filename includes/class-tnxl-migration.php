@@ -28,8 +28,18 @@ class TNXL_Migration {
 
         $this->migrate_options();
         $this->migrate_post_meta();
+        $this->ensure_default_feature_flags();
 
         update_option('tnxl_migrated_prefix', time());
+    }
+
+    private function ensure_default_feature_flags() {
+        if (null === get_option(TNXL_Settings::OPTION_CHECKOUT_RATES, null)) {
+            update_option(TNXL_Settings::OPTION_CHECKOUT_RATES, 'yes');
+        }
+        if (null === get_option(TNXL_Settings::OPTION_AUTO_SHIPMENTS, null)) {
+            update_option(TNXL_Settings::OPTION_AUTO_SHIPMENTS, 'yes');
+        }
     }
 
     private function migrate_options() {

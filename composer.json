@@ -2,6 +2,7 @@
     "name": "thainexus/thai-nexus-logistics",
     "license": "GPL-2.0-or-later",
     "require": {
+        "php": "^8.2",
         "dvdoug/boxpacker": "^4.0"
     }
 }

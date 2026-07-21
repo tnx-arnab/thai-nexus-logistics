@@ -7,6 +7,9 @@ if (!defined('ABSPATH')) exit;
 
 class TNXL_Shipping_Method extends WC_Shipping_Method {
 
+    /** @var bool */
+    private static $packing_errors_notified = false;
+
     public function __construct($instance_id = 0) {
         $this->id = 'tnxl_shipping';
         $this->instance_id = absint($instance_id);
@@ -45,14 +48,35 @@ class TNXL_Shipping_Method extends WC_Shipping_Method {
     }
 
     public function calculate_shipping($package = array()) {
+        if (!TNXL_Settings::can_fetch_checkout_rates()) {
+            return;
+        }
+
+        try {
+            $this->calculate_shipping_internal($package);
+        } catch (\Throwable $e) {
+            if (defined('TNXL_DEBUG') && TNXL_DEBUG) {
+                error_log('TNXL calculate_shipping: ' . $e->getMessage());
+            }
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $package
+     */
+    private function calculate_shipping_internal($package = array()) {
         $debug_enabled = TNXL_Debug_Logger::is_enabled();
         if ($debug_enabled) {
             TNXL_API::$last_debug_data = array(); // Reset
         }
 
-        $dest = $package['destination'];
+        $dest = $package['destination'] ?? array();
 
         if ($this->enabled === 'no') {
+            return;
+        }
+
+        if (empty($dest['country'])) {
             return;
         }
 
@@ -63,11 +87,19 @@ class TNXL_Shipping_Method extends WC_Shipping_Method {
 
         // Process all items in the package
         foreach ($items as $item_id => $values) {
+            $product = $values['data'] ?? null;
+            if (!$product instanceof WC_Product || !$product->needs_shipping()) {
+                continue;
+            }
+
+            if (!TNXL_Product::is_shipping_eligible($product)) {
+                return;
+            }
+
             $tnxl_items[] = $values;
-            $product = $values['data'];
-            
+
             // If any product is NOT a document, the whole shipment is not a document
-            if ($product->get_meta('_tnxl_is_document') !== 'yes') {
+            if (!TNXL_Product::is_document($product)) {
                 $is_document = false;
             }
 
@@ -78,7 +110,8 @@ class TNXL_Shipping_Method extends WC_Shipping_Method {
                     'qty'   => $values['quantity'],
                     'dimensions' => sprintf('%sx%sx%s cm', $product->get_length(), $product->get_width(), $product->get_height()),
                     'weight' => $product->get_weight() . ' kg',
-                    'is_document' => $product->get_meta('_tnxl_is_document') === 'yes',
+                    'is_document' => TNXL_Product::is_document($product),
+                    'is_boxed_product' => TNXL_Product::is_boxed_product($product),
                 );
             }
         }
@@ -92,9 +125,7 @@ class TNXL_Shipping_Method extends WC_Shipping_Method {
         $packing_result = $packer->pack_items($tnxl_items);
 
         if ($packing_result->has_errors()) {
-            foreach ($packing_result->get_errors() as $error) {
-                wc_add_notice($error, 'error');
-            }
+            $this->maybe_add_packing_notices($packing_result->get_errors());
             return;
         }
 
@@ -106,10 +137,45 @@ class TNXL_Shipping_Method extends WC_Shipping_Method {
 
         $all_quotes = array();
         $target_currency = get_woocommerce_currency();
-        $rate = TNXL_Currency::get_instance()->get_rate('THB', $target_currency);
-        $commission = TNXL_Commission::get_instance()->get_total_commission();
+        $rate = false;
+        if (class_exists('TNXL_Currency')) {
+            $rate = TNXL_Currency::get_instance()->get_rate('THB', $target_currency);
+        }
 
+        $commission = 0;
+        if (class_exists('TNXL_Commission')) {
+            $commission = TNXL_Commission::get_instance()->get_total_commission();
+        }
+
+        // Quote each unique parcel shape once. Repeated retail boxes would
+        // otherwise trigger one sequential HTTP request per cart quantity.
+        $quote_groups = array();
         foreach ($packed_boxes as $box) {
+            $signature = md5(wp_json_encode(array(
+                'weight' => round((float) $box['weight'], 6),
+                'length' => round((float) $box['length'], 6),
+                'width'  => round((float) $box['width'], 6),
+                'height' => round((float) $box['height'], 6),
+            )));
+            if (!isset($quote_groups[$signature])) {
+                $quote_groups[$signature] = array('box' => $box, 'count' => 0);
+            }
+            $quote_groups[$signature]['count']++;
+        }
+
+        $max_quote_requests = max(1, (int) apply_filters('tnxl_max_quote_requests', 10));
+        if (count($quote_groups) > $max_quote_requests) {
+            $this->maybe_add_packing_notices(array(sprintf(
+                /* translators: %d: maximum unique parcel types per checkout */
+                __('This cart requires more than the supported maximum of %d unique parcel quotes.', 'thai-nexus-logistics'),
+                $max_quote_requests
+            )));
+            return;
+        }
+
+        foreach ($quote_groups as $group) {
+            $box = $group['box'];
+            $occurrences = $group['count'];
             $response = TNXL_API::get_instance()->get_quote(array(
                 'country'           => $dest['country'],
                 'state'             => $dest['state'],
@@ -122,8 +188,22 @@ class TNXL_Shipping_Method extends WC_Shipping_Method {
                 'is_document'       => $is_document,
             ));
 
-            if (is_wp_error($response) || !isset($response['quotes'])) {
-                continue;
+            if (is_wp_error($response)) {
+                $this->maybe_add_packing_notices(array(
+                    sprintf(
+                        /* translators: %s: API error message */
+                        __('Thai Nexus shipping rates are temporarily unavailable: %s', 'thai-nexus-logistics'),
+                        $response->get_error_message()
+                    ),
+                ));
+                return;
+            }
+
+            if (!isset($response['quotes']) || !is_array($response['quotes'])) {
+                $this->maybe_add_packing_notices(array(
+                    __('Unable to retrieve Thai Nexus shipping rates for one or more packages. Please try again.', 'thai-nexus-logistics'),
+                ));
+                return;
             }
 
             foreach ($response['quotes'] as $quote) {
@@ -136,17 +216,21 @@ class TNXL_Shipping_Method extends WC_Shipping_Method {
                         'count'          => 0,
                     );
                 }
-                $all_quotes[$courier]['total_price'] += (float) $quote['final_price_thb'];
-                $all_quotes[$courier]['count']++;
+                $all_quotes[$courier]['total_price'] += (float) $quote['final_price_thb'] * $occurrences;
+                $all_quotes[$courier]['count'] += $occurrences;
             }
         }
 
         // Only show couriers that could quote ALL boxes
         $box_count = count($packed_boxes);
         $final_quotes_debug = array();
+        $disabled_service_ids = TNXL_Settings::get_disabled_service_ids();
 
         foreach ($all_quotes as $courier => $data) {
             if ($data['count'] < $box_count) continue;
+            if (in_array(TNXL_Settings::normalize_service_id($courier), $disabled_service_ids, true)) {
+                continue;
+            }
 
             $cost = $data['total_price'];
             if ($rate) {
@@ -198,6 +282,32 @@ class TNXL_Shipping_Method extends WC_Shipping_Method {
                 'commission'     => $commission,
             ));
         }
+    }
+
+    /**
+     * Show packing validation errors at checkout only, once per request.
+     *
+     * @param string[] $errors
+     */
+    private function maybe_add_packing_notices(array $errors) {
+        if (self::$packing_errors_notified || empty($errors)) {
+            return;
+        }
+
+        $show = is_checkout();
+        if (!$show && defined('REST_REQUEST') && REST_REQUEST) {
+            $request = method_exists('WP_REST_Server', 'get_current_request') ? WP_REST_Server::get_current_request() : null;
+            $show = $request && str_contains((string) $request->get_route(), 'wc/store');
+        }
+
+        if (!$show) {
+            return;
+        }
+
+        foreach ($errors as $error) {
+            wc_add_notice($error, 'error');
+        }
+        self::$packing_errors_notified = true;
     }
 }
 

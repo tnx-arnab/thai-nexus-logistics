@@ -61,7 +61,7 @@ class TNXL_Checkout_Block_Integration implements IntegrationInterface {
     public function get_script_data() {
         return array(
             'method_id' => 'tnxl_shipping',
-            'enabled'   => get_option('tnxl_api_token', '') ? 'yes' : 'no',
+            'enabled'   => TNXL_Settings::can_fetch_checkout_rates() ? 'yes' : 'no',
         );
     }
 }

@@ -19,13 +19,19 @@ class TNXL_API {
     }
 
     private function get_token() {
-        return get_option('tnxl_api_token', '');
+        return TNXL_Settings::get_api_token();
     }
 
     /**
      * Get Shipping Quotes
      */
     public function get_quote($data) {
+        if (!TNXL_Settings::are_services_active()) {
+            return new WP_Error(
+                'tnxl_not_configured',
+                __('Thai Nexus API token is not configured.', 'thai-nexus-logistics')
+            );
+        }
         $cache_key = 'tnxl_quote_' . md5(json_encode($data));
         $cached    = get_transient($cache_key);
         
@@ -51,9 +57,86 @@ class TNXL_API {
     }
 
     /**
+     * Validate a candidate token without saving it.
+     */
+    public function test_connection($token) {
+        $token = trim((string) $token);
+        if ($token === '') {
+            return new WP_Error(
+                'tnxl_not_configured',
+                __('Thai Nexus API token is required.', 'thai-nexus-logistics')
+            );
+        }
+
+        return $this->request('apiQuote', array(
+            'api_token'       => $token,
+            'country'         => 'TH',
+            'state'           => 'BKK',
+            'postcode'        => '10110',
+            'city'            => 'Bangkok',
+            'actual_weight_kg'=> 1,
+            'length_cm'       => 20,
+            'width_cm'        => 15,
+            'height_cm'       => 10,
+            'is_document'     => false,
+        ));
+    }
+
+    /**
+     * Retrieve the courier services available to the saved account.
+     */
+    public function get_shipping_services() {
+        if (!TNXL_Settings::are_services_active()) {
+            return new WP_Error(
+                'tnxl_not_configured',
+                __('Thai Nexus API token is not configured.', 'thai-nexus-logistics')
+            );
+        }
+
+        $url = $this->base_url . 'apiShippingServices';
+        $response = wp_remote_post($url, array(
+            'headers' => array(
+                'Content-Type'  => 'application/json',
+                'Accept'        => 'application/json',
+                'Authorization' => 'Bearer ' . $this->get_token(),
+            ),
+            'timeout' => 30,
+        ));
+
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        $status_code = wp_remote_retrieve_response_code($response);
+        $body_raw = wp_remote_retrieve_body($response);
+        $body = json_decode($body_raw, true);
+
+        if ($status_code >= 400 || !is_array($body)) {
+            $message = is_array($body)
+                ? ($body['message'] ?? $body['error'] ?? '')
+                : '';
+            return new WP_Error(
+                'tnxl_api_error',
+                $message !== ''
+                    ? sanitize_text_field($message)
+                    : __('Failed to load Thai Nexus shipping services.', 'thai-nexus-logistics')
+            );
+        }
+
+        return isset($body['data']) && is_array($body['data']) ? $body['data'] : array();
+    }
+
+    /**
      * CRUD Operations for Shipments
      */
     public function shipment_crud($action, $data = array()) {
+        if (!TNXL_Settings::are_services_active()) {
+            return new WP_Error(
+                'tnxl_not_configured',
+                __('Thai Nexus API token is not configured.', 'thai-nexus-logistics')
+            );
+        }
+
         $endpoint = 'shipmentCrud';
         $payload = array_merge(array(
             'api_token' => $this->get_token(),
@@ -67,6 +150,13 @@ class TNXL_API {
      * Generic Request Handler
      */
     private function request($endpoint, $payload) {
+        if (empty($payload['api_token'])) {
+            return new WP_Error(
+                'tnxl_not_configured',
+                __('Thai Nexus API token is not configured.', 'thai-nexus-logistics')
+            );
+        }
+
         $url = $this->base_url . $endpoint;
 
         $response = wp_remote_post($url, array(
@@ -101,7 +191,18 @@ class TNXL_API {
         }
 
         if ($status_code >= 400 || empty($body)) {
-            return new WP_Error('tnxl_api_error', isset($body['message']) ? $body['message'] : __('API request failed', 'thai-nexus-logistics'), $body);
+            $message = '';
+            if (is_array($body)) {
+                $message = (string) ($body['message'] ?? $body['error'] ?? '');
+            }
+
+            return new WP_Error(
+                'tnxl_api_error',
+                $message !== ''
+                    ? sanitize_text_field($message)
+                    : __('API request failed', 'thai-nexus-logistics'),
+                $body
+            );
         }
 
         return $body;

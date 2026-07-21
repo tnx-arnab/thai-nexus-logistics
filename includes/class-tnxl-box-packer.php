@@ -65,12 +65,13 @@ class TNXL_Packable_Item implements ItemInterface {
 
     public function __construct($product, $qty) {
         $this->description = $product->get_name();
-        // WooCommerce units are typically cm/kg, BoxPacker expects mm/g or consistent units.
-        // We'll use mm/g for precision.
-        $this->width  = (float) $product->get_width() ?: 10.0;
-        $this->length = (float) $product->get_length() ?: 10.0;
-        $this->depth  = (float) $product->get_height() ?: 10.0;
-        $this->weight = (float) $product->get_weight() ?: 0.5;
+        // Product measurements use the store units. Normalize them to the
+        // cm/kg units used by box definitions and the Thai Nexus API.
+        $measurements = TNXL_Product::get_shipping_measurements($product);
+        $this->width  = $measurements['width'];
+        $this->length = $measurements['length'];
+        $this->depth  = $measurements['height'];
+        $this->weight = $measurements['weight'];
         $this->keepFlat = false; // Could be a meta field later
     }
 
@@ -79,6 +80,14 @@ class TNXL_Packable_Item implements ItemInterface {
     public function getLength(): int { return (int) ($this->length * 10); }
     public function getDepth(): int { return (int) ($this->depth * 10); }
     public function getWeight(): int { return (int) ($this->weight * 1000); }
+
+    /**
+     * BoxPacker 3.x Item API (removed in 4.0). Kept for sites with a stale vendor/ copy.
+     */
+    public function getKeepFlat(): bool {
+        return $this->keepFlat;
+    }
+
     public function getAllowedRotation(): Rotation {
         return $this->keepFlat ? Rotation::KeepFlat : Rotation::BestFit;
     }
@@ -157,6 +166,11 @@ class TNXL_Box_Packer {
             return $validation_result;
         }
 
+        $boxed_result = $this->pack_boxed_product_cart($items);
+        if ($boxed_result instanceof TNXL_Packing_Result) {
+            return $boxed_result;
+        }
+
         if (empty($box_definitions)) {
             return $this->fallback_naive($items);
         }
@@ -223,9 +237,69 @@ class TNXL_Box_Packer {
 
             }
             
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             // If packing fails mid-way, fallback to naive for everything
             return $this->fallback_naive($items);
+        }
+
+        return $result;
+    }
+
+    /**
+     * A cart containing one unique boxed product ships each unit in its retail box.
+     *
+     * @return TNXL_Packing_Result|null
+     */
+    private function pack_boxed_product_cart($items) {
+        $product_id = null;
+        $units = array();
+
+        foreach ($items as $item_values) {
+            $product = $item_values['data'] ?? null;
+            if (!$product instanceof WC_Product || !$product->needs_shipping()) {
+                continue;
+            }
+
+            $effective_id = $product->get_parent_id() ?: $product->get_id();
+            if ($product_id !== null && $product_id !== $effective_id) {
+                return null;
+            }
+            if (!TNXL_Product::is_boxed_product($product)) {
+                return null;
+            }
+
+            $product_id = $effective_id;
+            $quantity = max(0, absint($item_values['quantity'] ?? 0));
+            for ($index = 0; $index < $quantity; $index++) {
+                $units[] = $product;
+            }
+        }
+
+        if ($product_id === null || empty($units)) {
+            return null;
+        }
+
+        $result = new TNXL_Packing_Result();
+        $max_boxes = max(1, (int) apply_filters('tnxl_max_shipment_boxes', 50));
+        if (count($units) > $max_boxes) {
+            $result->add_error(sprintf(
+                /* translators: %d: maximum number of retail boxes per checkout */
+                __('This boxed-product cart requires more than the supported maximum of %d shipment boxes.', 'thai-nexus-logistics'),
+                $max_boxes
+            ));
+            return $result;
+        }
+
+        foreach ($units as $product) {
+            $measurements = TNXL_Product::get_shipping_measurements($product);
+            $result->add_box(array(
+                'name'   => __('Retail Product Box', 'thai-nexus-logistics'),
+                'length' => $measurements['length'],
+                'width'  => $measurements['width'],
+                'height' => $measurements['height'],
+                'weight' => $measurements['weight'],
+                'items'  => array($product->get_name()),
+            ));
         }
 
         return $result;
@@ -240,10 +314,11 @@ class TNXL_Box_Packer {
             $product = $item_values['data'];
             if (!$product->needs_shipping()) continue;
 
-            $l = (float) $product->get_length();
-            $w = (float) $product->get_width();
-            $h = (float) $product->get_height();
-            $wt = (float) $product->get_weight();
+            $measurements = TNXL_Product::get_shipping_measurements($product);
+            $l = $measurements['length'];
+            $w = $measurements['width'];
+            $h = $measurements['height'];
+            $wt = $measurements['weight'];
 
             if (!$l || !$w || !$h || !$wt) {
                 // translators: %s: product name
@@ -272,10 +347,11 @@ class TNXL_Box_Packer {
 
             if (!$product->needs_shipping()) continue;
 
-            $weight = (float) $product->get_weight() ?: 0.5;
-            $length = (float) $product->get_length() ?: 10;
-            $width = (float) $product->get_width() ?: 10;
-            $height = (float) $product->get_height() ?: 10;
+            $measurements = TNXL_Product::get_shipping_measurements($product);
+            $weight = $measurements['weight'];
+            $length = $measurements['length'];
+            $width = $measurements['width'];
+            $height = $measurements['height'];
 
             $total_weight += ($weight * $qty);
             $max_length = max($max_length, $length);

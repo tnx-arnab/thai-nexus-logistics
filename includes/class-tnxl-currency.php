@@ -20,6 +20,9 @@ class TNXL_Currency {
     }
 
     private function __construct() {
+        if (!TNXL_Settings::can_fetch_checkout_rates()) {
+            return;
+        }
         add_filter('woocommerce_get_price_html', array($this, 'append_usd_price'), 10, 2);
     }
 
@@ -27,6 +30,10 @@ class TNXL_Currency {
      * Get exchange rate between two currencies
      */
     public function get_rate($from = 'THB', $to = 'USD') {
+        if (!TNXL_Settings::are_services_active()) {
+            return false;
+        }
+
         if ($from === $to) {
             return 1.0;
         }
