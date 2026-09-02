@@ -62,9 +62,11 @@ class TNXL_Packable_Item implements ItemInterface {
     private $depth;
     private $weight;
     private $keepFlat;
+    private $product_id;
 
     public function __construct($product, $qty) {
         $this->description = $product->get_name();
+        $this->product_id = (int) $product->get_id();
         // Product measurements use the store units. Normalize them to the
         // cm/kg units used by box definitions and the Thai Nexus API.
         $measurements = TNXL_Product::get_shipping_measurements($product);
@@ -76,6 +78,7 @@ class TNXL_Packable_Item implements ItemInterface {
     }
 
     public function getDescription(): string { return $this->description; }
+    public function getProductId(): int { return $this->product_id; }
     public function getWidth(): int { return (int) ($this->width * 10); }
     public function getLength(): int { return (int) ($this->length * 10); }
     public function getDepth(): int { return (int) ($this->depth * 10); }
@@ -127,7 +130,7 @@ class TNXL_Packing_Result {
                 'width'  => (float) $item->getWidth() / 10,
                 'height' => (float) $item->getDepth() / 10,
                 'weight' => (float) $item->getWeight() / 1000,
-                'items'  => [$item->getDescription()],
+                'items'  => array(self::box_item_record($item->getDescription(), 1, method_exists($item, 'getProductId') ? $item->getProductId() : 0)),
             ];
             $all[] = $box;
 
@@ -221,10 +224,7 @@ class TNXL_Box_Packer {
 
             foreach ($packed_boxes as $packed_box) {
                 $box_type = $packed_box->box;
-                $box_items = [];
-                foreach ($packed_box->items->asItemArray() as $p_item) {
-                    $box_items[] = $p_item->getDescription();
-                }
+                $box_items = self::aggregate_packed_items($packed_box->items->asItemArray());
 
                 $result->add_box([
                     'name'   => $box_type->getReference(),
@@ -298,7 +298,7 @@ class TNXL_Box_Packer {
                 'width'  => $measurements['width'],
                 'height' => $measurements['height'],
                 'weight' => $measurements['weight'],
-                'items'  => array($product->get_name()),
+                'items'  => array(self::box_item_record($product->get_name(), 1, (int) $product->get_id())),
             ));
         }
 
@@ -363,7 +363,11 @@ class TNXL_Box_Packer {
             $items_desc = [];
             foreach ($items as $item_values) {
                 if ($item_values['data']->needs_shipping()) {
-                    $items_desc[] = $item_values['data']->get_name();
+                    $items_desc[] = self::box_item_record(
+                        $item_values['data']->get_name(),
+                        max(1, (int) ($item_values['quantity'] ?? 1)),
+                        (int) $item_values['data']->get_id()
+                    );
                 }
             }
             $result->add_box([
@@ -378,6 +382,55 @@ class TNXL_Box_Packer {
         }
 
         return $result;
+    }
+
+    /**
+     * @param object[] $packed_items
+     * @return array<int, array{product_id:int,description:string,quantity:int}>
+     */
+    private static function aggregate_packed_items(array $packed_items): array {
+        $counts = array();
+        foreach ($packed_items as $packed_item) {
+            $description = method_exists($packed_item, 'getDescription') ? (string) $packed_item->getDescription() : '';
+            $product_id = method_exists($packed_item, 'getProductId') ? (int) $packed_item->getProductId() : 0;
+            $key = $product_id > 0 ? 'id:' . $product_id : 'name:' . $description;
+            if (!isset($counts[$key])) {
+                $counts[$key] = self::box_item_record($description, 0, $product_id);
+            }
+            $counts[$key]['quantity']++;
+        }
+        return array_values($counts);
+    }
+
+    /**
+     * @return array{product_id:int,description:string,quantity:int}
+     */
+    public static function box_item_record(string $description, int $quantity, int $product_id = 0): array {
+        return array(
+            'product_id'  => $product_id,
+            'description' => $description,
+            'quantity'    => max(0, $quantity),
+        );
+    }
+
+    /**
+     * Human-readable names for shipment descriptions (legacy string items still work).
+     *
+     * @param mixed[] $items
+     * @return string[]
+     */
+    public static function summarize_box_items(array $items): array {
+        $names = array();
+        foreach ($items as $item) {
+            if (is_array($item)) {
+                $name = (string) ($item['description'] ?? '');
+                $qty = max(1, (int) ($item['quantity'] ?? 1));
+                $names[] = $qty > 1 ? $name . ' x' . $qty : $name;
+                continue;
+            }
+            $names[] = (string) $item;
+        }
+        return $names;
     }
 }
 

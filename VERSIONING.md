@@ -1,10 +1,10 @@
 # Versioning policy
 
-**Current release line: `1.5.x` (latest: `1.5.11`)**
+**Current release line: `1.5.x` (latest: `1.5.14`)**
 
 ## Rules
 
-- Use **patch** bumps only: `1.5.11` → `1.5.12` → `1.5.13`, etc.
+- Use **patch** bumps only: `1.5.14` → `1.5.15` → `1.5.16`, etc.
 - Update together when releasing:
   - `thai-nexus-logistics.php` — `Version` header and `TNXL_VERSION`
   - `readme.txt` — `Stable tag` and changelog section
@@ -18,7 +18,7 @@
 ## SVN deploy
 
 ```bash
-./deploy-svn.sh "Your message" 1.5.11
+./deploy-svn.sh "Your message" 1.5.14
 ```
 
 The deploy script blocks tags outside `1.5.x` unless you set:

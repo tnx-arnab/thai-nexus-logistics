@@ -474,9 +474,9 @@ const SettingsPage = () => {
             to the <a href="https://app.thainexus.co.th/" target="_blank" className="text-primary hover:underline font-medium"> Thai Nexus API</a>. 
           </p>
           <p className="text-black  text-sm mt-4 leading-relaxed">
-            Additionally, it communicates with the <a href="https://www.frankfurter.app/" target="_blank" className="text-primary hover:underline font-medium">Frankfurter API</a> to fetch current exchange 
-            rates for currency conversion. No customer PII (Name, Email, Phone) is sent during the 
-            quotation phase.
+            Additionally, it communicates with the <a href="https://frankfurter.dev/" target="_blank" rel="noreferrer" className="text-primary hover:underline font-medium">Frankfurter API</a> to fetch current exchange
+            rates, and falls back to <a href="https://www.exchangerate-api.com" target="_blank" rel="noreferrer" className="text-primary hover:underline font-medium">Exchange Rate API</a> for currencies Frankfurter does not cover.
+            No customer PII (Name, Email, Phone) is sent during the quotation phase.
           </p>
         </div>
       </div>

@@ -1,6 +1,55 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Search, ChevronLeft, ChevronRight, Loader2, Calendar, Weight, Info, X, MapPin, Phone, User, Tag, AlertCircle, Key, ArrowRight } from 'lucide-react';
+import { Package, Search, ChevronLeft, ChevronRight, Loader2, X, MapPin, Phone, Tag, Key, ArrowRight, ExternalLink, RefreshCw } from 'lucide-react';
 import axios from 'axios';
+
+const TRACKING_BASE = 'https://tracking.thainexus.co.th/track/';
+
+const isTnxCode = (value) => typeof value === 'string' && /^TNX[A-Z0-9]+$/i.test(value.trim());
+
+const getTnxCode = (shipment) => {
+  if (!shipment || typeof shipment !== 'object') {
+    return '';
+  }
+  const sources = [shipment, shipment.data].filter(Boolean);
+  const keys = ['tnx_tracking_number', 'customer_tracking_code', 'tnx_tracking_code', 'tnx_code', 'tracking_number'];
+  for (const source of sources) {
+    for (const key of keys) {
+      const candidate = source[key];
+      if (isTnxCode(candidate)) {
+        return String(candidate).trim().toUpperCase();
+      }
+    }
+  }
+  return '';
+};
+
+const getTrackingUrl = (shipment) => {
+  if (shipment?.tracking_url) {
+    return shipment.tracking_url;
+  }
+  const tnx = getTnxCode(shipment);
+  return tnx ? `${TRACKING_BASE}${tnx}` : '';
+};
+
+const formatDate = (value) => {
+  if (!value) {
+    return '';
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString();
+};
+
+const getAddress = (shipment, key) => shipment?.[key] || shipment?.data?.[key] || {};
+
+const getField = (shipment, key, fallback = '') => {
+  if (shipment?.[key] !== undefined && shipment?.[key] !== null && shipment?.[key] !== '') {
+    return shipment[key];
+  }
+  if (shipment?.data?.[key] !== undefined && shipment?.data?.[key] !== null && shipment?.data?.[key] !== '') {
+    return shipment.data[key];
+  }
+  return fallback;
+};
 
 const ShipmentsPage = () => {
   const [loading, setLoading] = useState(false);
@@ -9,6 +58,8 @@ const ShipmentsPage = () => {
   const [total, setTotal] = useState(0);
   const [selectedShipment, setSelectedShipment] = useState(null);
   const [detailsLoading, setDetailsLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState('');
   const [errorType, setErrorType] = useState(null); // 'auth' | 'general'
 
   useEffect(() => {
@@ -45,6 +96,7 @@ const ShipmentsPage = () => {
 
   const fetchShipmentDetails = async (requestNumber) => {
     setDetailsLoading(true);
+    setSyncMessage('');
     setSelectedShipment({ request_number: requestNumber }); // Placeholder for animation
     try {
       // @ts-ignore
@@ -61,6 +113,42 @@ const ShipmentsPage = () => {
       setSelectedShipment(null);
     } finally {
       setDetailsLoading(false);
+    }
+  };
+
+  const syncShipment = async () => {
+    const requestNumber = selectedShipment?.request_number;
+    if (!requestNumber || syncing) {
+      return;
+    }
+    setSyncing(true);
+    setSyncMessage('');
+    try {
+      // @ts-ignore
+      const response = await axios.post(`${window.tnxlData.apiUrl}/shipments/${requestNumber}/sync`, {}, {
+        headers: {
+          // @ts-ignore
+          'X-WP-Nonce': window.tnxlData.nonce
+        }
+      });
+      if (response.data?.shipment) {
+        setSelectedShipment(response.data.shipment);
+      }
+      const orderCount = Array.isArray(response.data?.orders_updated)
+        ? response.data.orders_updated.length
+        : 0;
+      setSyncMessage(
+        orderCount > 0
+          ? `Synced TNX, status, and ${orderCount} WooCommerce order${orderCount === 1 ? '' : 's'}.`
+          : 'Synced TNX and status. No linked WooCommerce order.'
+      );
+      fetchShipments();
+    } catch (error) {
+      console.error('Failed to sync shipment', error);
+      const message = error.response?.data?.message || 'Could not sync this shipment.';
+      setSyncMessage(typeof message === 'string' ? message : 'Could not sync this shipment.');
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -164,7 +252,7 @@ const ShipmentsPage = () => {
                       {shipment.volumetric_weight_kg || shipment.data?.volumetric_weight_kg || '0'} kg
                     </td>
                     <td className="px-5 py-3 text-gray-400 text-xs">
-                      {new Date(shipment.submitted_date || shipment.created_at).toLocaleDateString()}
+                      {formatDate(shipment.submitted_date || shipment.created_at)}
                     </td>
                     <td className="px-5 py-3 text-right">
                       <button 
@@ -221,14 +309,35 @@ const ShipmentsPage = () => {
                   <h3 className="text-2xl font-black text-white tracking-tight leading-none mb-1.5">
                     {selectedShipment.request_number}
                   </h3>
-                  <div className="flex items-center gap-2">
-                    <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black border uppercase tracking-wider ${getStatusColor(selectedShipment.status, true)}`}>
-                      {selectedShipment.status}
-                    </span>
-                    <span className="text-white/40 text-[9px] font-bold">
-                      {new Date(selectedShipment.submitted_date || selectedShipment.created_at).toLocaleDateString()}
-                    </span>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {selectedShipment.status ? (
+                      <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black border uppercase tracking-wider ${getStatusColor(selectedShipment.status, true)}`}>
+                        {selectedShipment.status}
+                      </span>
+                    ) : null}
+                    {formatDate(selectedShipment.submitted_date || selectedShipment.created_at) ? (
+                      <span className="text-white/40 text-[9px] font-bold">
+                        {formatDate(selectedShipment.submitted_date || selectedShipment.created_at)}
+                      </span>
+                    ) : null}
                   </div>
+                  {!detailsLoading ? (
+                    getTnxCode(selectedShipment) ? (
+                      <a
+                        href={getTrackingUrl(selectedShipment)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-white/90 hover:text-white underline underline-offset-2"
+                      >
+                        {getTnxCode(selectedShipment)}
+                        <ExternalLink size={12} />
+                      </a>
+                    ) : (
+                      <p className="mt-2 text-[10px] font-medium text-white/50">
+                        Tracking number not generated yet
+                      </p>
+                    )
+                  ) : null}
                 </div>
               </div>
               <button 
@@ -255,14 +364,14 @@ const ShipmentsPage = () => {
                         <div className="w-1 h-1 rounded-full bg-primary" /> Shipper
                       </h4>
                       <div className="bg-gray-50/50 p-5 rounded-2xl border border-gray-100">
-                        <p className="font-black text-secondary text-lg leading-tight">{selectedShipment.shipper_address?.name}</p>
+                        <p className="font-black text-secondary text-lg leading-tight">{getAddress(selectedShipment, 'shipper_address').name}</p>
                         <div className="space-y-2 mt-4">
                           <p className="text-xs text-gray-500 font-bold flex items-center gap-2">
-                            <Phone size={12} className="text-primary" /> {selectedShipment.shipper_address?.phone}
+                            <Phone size={12} className="text-primary" /> {getAddress(selectedShipment, 'shipper_address').phone}
                           </p>
                           <p className="text-xs text-gray-600 leading-relaxed flex items-start gap-2">
                             <MapPin size={12} className="text-primary mt-0.5 shrink-0" /> 
-                            <span>{selectedShipment.shipper_address?.address_line1 || selectedShipment.shipper_address?.address}, <span className="font-bold text-gray-400">{selectedShipment.shipper_address?.city}, {selectedShipment.shipper_address?.country}</span></span>
+                            <span>{getAddress(selectedShipment, 'shipper_address').address_line1 || getAddress(selectedShipment, 'shipper_address').address}, <span className="font-bold text-gray-400">{getAddress(selectedShipment, 'shipper_address').city}, {getAddress(selectedShipment, 'shipper_address').country}</span></span>
                           </p>
                         </div>
                       </div>
@@ -274,14 +383,14 @@ const ShipmentsPage = () => {
                         <div className="w-1 h-1 rounded-full bg-blue-500" /> Consignee
                       </h4>
                       <div className="bg-gray-50/50 p-5 rounded-2xl border border-gray-100">
-                        <p className="font-black text-secondary text-lg leading-tight">{selectedShipment.consignee_address?.name}</p>
+                        <p className="font-black text-secondary text-lg leading-tight">{getAddress(selectedShipment, 'consignee_address').name}</p>
                         <div className="space-y-2 mt-4">
                           <p className="text-xs text-gray-500 font-bold flex items-center gap-2">
-                            <Phone size={12} className="text-blue-500" /> {selectedShipment.consignee_address?.phone}
+                            <Phone size={12} className="text-blue-500" /> {getAddress(selectedShipment, 'consignee_address').phone}
                           </p>
                           <p className="text-xs text-gray-600 leading-relaxed flex items-start gap-2">
                             <MapPin size={12} className="text-blue-500 mt-0.5 shrink-0" /> 
-                            <span>{selectedShipment.consignee_address?.address_line1 || selectedShipment.consignee_address?.address}, <span className="font-bold text-gray-400">{selectedShipment.consignee_address?.city}, {selectedShipment.consignee_address?.country}</span></span>
+                            <span>{getAddress(selectedShipment, 'consignee_address').address_line1 || getAddress(selectedShipment, 'consignee_address').address}, <span className="font-bold text-gray-400">{getAddress(selectedShipment, 'consignee_address').city}, {getAddress(selectedShipment, 'consignee_address').country}</span></span>
                           </p>
                         </div>
                       </div>
@@ -295,10 +404,10 @@ const ShipmentsPage = () => {
                     </h4>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                       {[
-                        { label: 'Weight', value: `${selectedShipment.actual_weight_kg} kg` },
-                        { label: 'Length', value: `${selectedShipment.length_cm} cm` },
-                        { label: 'Width', value: `${selectedShipment.width_cm} cm` },
-                        { label: 'Height', value: `${selectedShipment.height_cm} cm` }
+                        { label: 'Weight', value: `${getField(selectedShipment, 'actual_weight_kg', '0')} kg` },
+                        { label: 'Length', value: `${getField(selectedShipment, 'length_cm', '0')} cm` },
+                        { label: 'Width', value: `${getField(selectedShipment, 'width_cm', '0')} cm` },
+                        { label: 'Height', value: `${getField(selectedShipment, 'height_cm', '0')} cm` }
                       ].map((item, i) => (
                         <div key={i} className="bg-white border border-gray-100 p-4 rounded-xl text-center shadow-sm">
                           <p className="text-[8px] text-gray-300 uppercase font-black mb-1 tracking-widest">{item.label}</p>
@@ -312,7 +421,7 @@ const ShipmentsPage = () => {
                        <div className="min-w-0">
                          <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest mb-1">Description</p>
                          <p className="text-xs text-gray-700 font-medium leading-relaxed italic truncate md:whitespace-normal">
-                           {selectedShipment.shipment_description || 'No specific description provided.'}
+                           {getField(selectedShipment, 'shipment_description', 'No specific description provided.')}
                          </p>
                        </div>
                     </div>
@@ -322,13 +431,32 @@ const ShipmentsPage = () => {
             </div>
 
             {/* Modal Footer - COMPACT */}
-            <div className="p-4 md:p-6 border-t border-gray-50 bg-gray-50/30 flex justify-end items-center">
-              <button 
-                onClick={() => setSelectedShipment(null)}
-                className="px-6 py-2.5 rounded-xl font-black text-secondary hover:bg-secondary hover:text-white transition-all text-[10px] uppercase tracking-widest border border-gray-200 hover:border-secondary shadow-sm"
-              >
-                Close View
-              </button>
+            <div className="p-4 md:p-6 border-t border-gray-50 bg-gray-50/30 flex flex-col sm:flex-row sm:justify-end sm:items-center gap-3">
+              {syncMessage ? (
+                <p className="text-[11px] font-medium text-gray-500 sm:mr-auto">{syncMessage}</p>
+              ) : null}
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={detailsLoading || syncing || !selectedShipment.request_number}
+                  onClick={syncShipment}
+                  className="px-6 py-2.5 rounded-xl font-black text-white bg-secondary hover:bg-secondary/90 transition-all text-[10px] uppercase tracking-widest border border-secondary shadow-sm disabled:opacity-40 inline-flex items-center gap-2"
+                >
+                  {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
+                  Sync tracking
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => {
+                    setSelectedShipment(null);
+                    setSyncing(false);
+                    setSyncMessage('');
+                  }}
+                  className="px-6 py-2.5 rounded-xl font-black text-secondary hover:bg-secondary hover:text-white transition-all text-[10px] uppercase tracking-widest border border-gray-200 hover:border-secondary shadow-sm"
+                >
+                  Close View
+                </button>
+              </div>
             </div>
           </div>
         </div>

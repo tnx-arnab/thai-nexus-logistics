@@ -50,6 +50,20 @@ class TNXL_Product {
             'description'   => __('For a cart containing only this product, quote each unit using its retail dimensions instead of merchant packing boxes.', 'thai-nexus-logistics'),
             'desc_tip'      => true,
         ));
+        woocommerce_wp_text_input(array(
+            'id'          => '_tnxl_hs_code',
+            'label'       => __('HS Code', 'thai-nexus-logistics'),
+            'description' => __('Harmonized System code sent on Thai Nexus shipment items (e.g. 420221).', 'thai-nexus-logistics'),
+            'desc_tip'    => true,
+            'placeholder' => '420221',
+        ));
+        woocommerce_wp_text_input(array(
+            'id'          => '_tnxl_country_of_origin',
+            'label'       => __('Country of origin', 'thai-nexus-logistics'),
+            'description' => __('ISO 2-letter origin sent on Thai Nexus shipment items. Defaults to the store country.', 'thai-nexus-logistics'),
+            'desc_tip'    => true,
+            'placeholder' => 'TH',
+        ));
         echo '</div>';
     }
 
@@ -73,6 +87,14 @@ class TNXL_Product {
 
         $is_boxed_product = isset($_POST['_tnxl_is_boxed_product']) ? 'yes' : 'no';
         update_post_meta($post_id, '_tnxl_is_boxed_product', $is_boxed_product);
+
+        if (isset($_POST['_tnxl_hs_code'])) {
+            update_post_meta($post_id, '_tnxl_hs_code', self::normalize_hs_code(wp_unslash($_POST['_tnxl_hs_code'])));
+        }
+        if (isset($_POST['_tnxl_country_of_origin'])) {
+            $origin = strtoupper(preg_replace('/[^A-Za-z]/', '', sanitize_text_field(wp_unslash($_POST['_tnxl_country_of_origin']))));
+            update_post_meta($post_id, '_tnxl_country_of_origin', substr($origin, 0, 2));
+        }
     }
 
     public static function is_shipping_eligible($product): bool {
@@ -139,6 +161,132 @@ class TNXL_Product {
             'height' => (float) wc_get_dimension($values['height'], 'cm'),
             'weight' => (float) wc_get_weight($values['weight'], 'kg'),
         );
+    }
+
+    /**
+     * Customs fields for shipment items (HS code and origin).
+     *
+     * @return array{hs_code: string, country_of_origin: string}
+     */
+    public static function get_customs_details($product): array {
+        $hs = '';
+        $origin = '';
+        $hs_keys = array('_tnxl_hs_code', '_hs_code', 'hs_code', '_harmonized_system_code', '_hs_tariff_number');
+        $origin_keys = array('_tnxl_country_of_origin', '_country_of_origin', 'country_of_origin');
+        $hs_attrs = array('hs-code', 'hs_code', 'pa_hs-code', 'pa_hs_code');
+        $origin_attrs = array('country-of-origin', 'origin', 'pa_country-of-origin', 'pa_origin');
+
+        if ($product instanceof WC_Product) {
+            foreach ($hs_keys as $key) {
+                $value = self::read_product_meta($product, $key);
+                if ($value !== '') {
+                    $hs = $value;
+                    break;
+                }
+            }
+            if ($hs === '') {
+                foreach ($hs_attrs as $attr) {
+                    $value = trim((string) $product->get_attribute($attr));
+                    if ($value !== '') {
+                        $hs = $value;
+                        break;
+                    }
+                }
+            }
+            foreach ($origin_keys as $key) {
+                $value = self::read_product_meta($product, $key);
+                if ($value !== '') {
+                    $origin = $value;
+                    break;
+                }
+            }
+            if ($origin === '') {
+                foreach ($origin_attrs as $attr) {
+                    $value = trim((string) $product->get_attribute($attr));
+                    if ($value !== '') {
+                        $origin = $value;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if ($origin === '') {
+            $store_country = (string) get_option('woocommerce_default_country', 'TH');
+            $origin = strtoupper(substr($store_country, 0, 2));
+        }
+
+        $origin = strtoupper(preg_replace('/[^A-Z]/', '', $origin));
+        if (strlen($origin) > 2) {
+            $origin = substr($origin, 0, 2);
+        }
+        if ($origin === '') {
+            $origin = 'TH';
+        }
+
+        return array(
+            'hs_code'           => self::normalize_hs_code($hs),
+            'country_of_origin' => $origin,
+        );
+    }
+
+    /**
+     * Thai Nexus stores 6-10 digit codes with no separators.
+     */
+    public static function normalize_hs_code($raw): string {
+        $digits = preg_replace('/\D/', '', (string) $raw);
+        $len = strlen($digits);
+        if ($len < 6 || $len > 12) {
+            return '';
+        }
+        return $len > 10 ? substr($digits, 0, 10) : $digits;
+    }
+
+    /**
+     * Product HS, then Thai Nexus suggestHsCode, then miscellaneous 999999.
+     */
+    public static function resolve_hs_code($product, string $description, string $destination_country = ''): string {
+        $hs = self::get_customs_details($product)['hs_code'];
+        if ($hs === '' && $product instanceof WC_Product) {
+            $hs = self::extract_hs_from_text(
+                $description . ' ' . $product->get_name() . ' ' . $product->get_description() . ' ' . $product->get_short_description()
+            );
+            if ($hs === '') {
+                $hs = self::normalize_hs_code($product->get_sku());
+            }
+        }
+        if ($hs === '') {
+            $hs = self::extract_hs_from_text($description);
+        }
+        if ($hs === '') {
+            $hs = TNXL_API::get_instance()->suggest_hs_code($description, $destination_country);
+            if ($hs !== '' && $product instanceof WC_Product) {
+                $id = $product->get_parent_id() ?: $product->get_id();
+                if (self::normalize_hs_code(get_post_meta($id, '_tnxl_hs_code', true)) === '') {
+                    update_post_meta($id, '_tnxl_hs_code', $hs);
+                }
+            }
+        }
+        return $hs !== '' ? $hs : '999999';
+    }
+
+    private static function extract_hs_from_text(string $text): string {
+        $stripped = wp_strip_all_tags($text);
+        if (preg_match('/(?:hs|hts|harmonized(?:\s+system)?)\s*codes?\s*[:#-]?\s*([0-9]{4,6}(?:[.\s]?[0-9]{2,4})?)/i', $stripped, $match)) {
+            return self::normalize_hs_code($match[1]);
+        }
+        return '';
+    }
+
+    private static function read_product_meta($product, string $key): string {
+        if (!$product instanceof WC_Product) {
+            return '';
+        }
+        $value = trim((string) $product->get_meta($key));
+        if ($value === '' && $product->get_parent_id()) {
+            $value = trim((string) get_post_meta($product->get_parent_id(), $key, true));
+        }
+        return $value;
     }
 
     private static function get_boolean_product_meta($product, string $key): bool {

@@ -23,6 +23,34 @@ class TNXL_Order {
             add_action('tnxl_create_shipment_async', array($this, 'auto_create_shipment'));
         }
         add_action('add_meta_boxes', array($this, 'add_shipment_meta_box'));
+        add_action('woocommerce_order_details_after_order_table', array($this, 'render_customer_tracking'));
+        add_action('woocommerce_email_after_order_table', array($this, 'render_email_tracking'), 10, 4);
+    }
+
+    /**
+     * My Account, thank you, and order-tracking shortcode.
+     */
+    public function render_customer_tracking($order): void {
+        if (!$order instanceof WC_Order) {
+            $order = wc_get_order($order);
+        }
+        if (!$order instanceof WC_Order) {
+            return;
+        }
+        TNXL_Tracking::render_customer_tracking($order, false);
+    }
+
+    /**
+     * Processing / completed customer emails.
+     */
+    public function render_email_tracking($order, $sent_to_admin, $plain_text, $email = null): void {
+        if ($sent_to_admin || !$order instanceof WC_Order) {
+            return;
+        }
+        if (!TNXL_Tracking::is_customer_status_email($email)) {
+            return;
+        }
+        TNXL_Tracking::render_email_tracking($order, (bool) $plain_text);
     }
 
     /**
@@ -173,14 +201,17 @@ class TNXL_Order {
         );
 
         $consignee = array(
-            'name'        => $order->get_shipping_first_name() . ' ' . $order->get_shipping_last_name(),
+            'name'        => trim(($order->get_shipping_first_name() ?: $order->get_billing_first_name()) . ' ' . ($order->get_shipping_last_name() ?: $order->get_billing_last_name())),
             'phone'       => $order->get_shipping_phone() ?: ($order->get_billing_phone() ?: '0000000000'),
-            'address'     => $order->get_shipping_address_1() . ' ' . $order->get_shipping_address_2(),
-            'city'        => $order->get_shipping_city(),
-            'state'       => $order->get_shipping_state(),
-            'postal_code' => $order->get_shipping_postcode(),
-            'country'     => $order->get_shipping_country(),
+            'email'       => $order->get_billing_email(),
+            'address'     => trim(($order->get_shipping_address_1() ?: $order->get_billing_address_1()) . ' ' . ($order->get_shipping_address_2() ?: $order->get_billing_address_2())),
+            'city'        => $order->get_shipping_city() ?: $order->get_billing_city(),
+            'state'       => $order->get_shipping_state() ?: $order->get_billing_state(),
+            'postal_code' => $order->get_shipping_postcode() ?: $order->get_billing_postcode(),
+            'country'     => $order->get_shipping_country() ?: $order->get_billing_country(),
         );
+
+        $service = $this->get_order_service($order);
 
         $tnxl_items = array();
         foreach ($order->get_items() as $item) {
@@ -254,7 +285,18 @@ class TNXL_Order {
                 continue;
             }
 
-            $box_items_desc = implode(', ', $box['items'] ?? []);
+            $box_items = is_array($box['items'] ?? null) ? $box['items'] : array();
+            $box_items_desc = implode(', ', TNXL_Box_Packer::summarize_box_items($box_items));
+            $shipment_items = $this->build_shipment_items(
+                $order,
+                $box_items,
+                (string) ($order->get_shipping_country() ?: $order->get_billing_country())
+            );
+            $declared_total = 0.0;
+            foreach ($shipment_items as $row) {
+                $declared_total += (float) ($row['declared_value'] ?? 0) * max(1, (int) ($row['quantity'] ?? 1));
+            }
+
             $payload = array(
                 'data' => array(
                     'shipper_address'   => array(
@@ -269,6 +311,7 @@ class TNXL_Order {
                     'consignee_address' => array(
                         'name'          => $consignee['name'],
                         'phone'         => $consignee['phone'],
+                        'email'         => $consignee['email'],
                         'address_line1' => $consignee['address'],
                         'city'          => $consignee['city'],
                         'state'         => $consignee['state'],
@@ -280,14 +323,24 @@ class TNXL_Order {
                     'width_cm'          => $box['width'],
                     'height_cm'         => $box['height'],
                     'shipment_type'     => 'parcel',
-                    'shipment_description' => 'Box ' . ($index + 1) . '/' . $expected_box_count . ': ' . $box_items_desc,
+                    'service_type'      => $service['name'] !== '' ? $service['name'] : $service['id'],
+                    'courier_name'      => $service['id'],
+                    'shipment_description' => 'WooCommerce Order #' . $order->get_order_number() . ' - Box ' . ($index + 1) . '/' . $expected_box_count . ': ' . $box_items_desc,
+                    'shipment_items'    => $shipment_items,
+                    'items'             => $shipment_items,
+                    'total_declared_value' => round($declared_total, 2),
+                    'external_order_id' => (string) $order->get_id(),
                 ),
             );
+
+            if ($payload['data']['service_type'] === '') {
+                unset($payload['data']['service_type'], $payload['data']['courier_name']);
+            }
 
             $response = $api->shipment_crud('create', $payload);
 
             if (!is_wp_error($response) && isset($response['data']['request_number'])) {
-                $shipments_by_index[$index] = $response['data'];
+                $shipments_by_index[$index] = TNXL_Tracking::normalize_shipment($response['data']);
             } else {
                 $errors[] = sprintf(
                     /* translators: 1: box number, 2: error message */
@@ -316,9 +369,15 @@ class TNXL_Order {
             $order->update_meta_data('_tnxl_shipment_id', $primary['id'] ?? '');
             $order->update_meta_data('_tnxl_request_number', $primary['request_number']);
             $order->update_meta_data('_tnxl_status', $primary['status'] ?? '');
+            $tnx = TNXL_Tracking::extract_tnx_code($primary);
+            if ($tnx !== '') {
+                $order->update_meta_data('_tnxl_tnx_tracking_number', $tnx);
+            }
         }
 
         $order->save();
+
+        TNXL_Tracking::maybe_notify_new_tracking($order);
 
         if (!empty($errors) && method_exists($order, 'add_order_note')) {
             $order->add_order_note(sprintf(
@@ -329,6 +388,138 @@ class TNXL_Order {
                 implode(' ', $errors)
             ));
         }
+    }
+
+    /**
+     * Courier selected at checkout.
+     *
+     * @return array{id: string, name: string}
+     */
+    private function get_order_service(WC_Order $order): array {
+        foreach ($order->get_shipping_methods() as $method) {
+            if (strpos((string) $method->get_method_id(), 'tnxl_shipping') === false) {
+                continue;
+            }
+
+            $id = trim((string) $method->get_meta('tnxl_courier'));
+            $name = trim((string) $method->get_meta('tnxl_courier_display'));
+            if ($name === '') {
+                $title = (string) $method->get_method_title();
+                $name = trim((string) preg_replace('/\s*\([^)]*days?\)\s*$/i', '', $title));
+            }
+
+            return array(
+                'id'   => $id,
+                'name' => $name !== '' ? $name : $id,
+            );
+        }
+
+        return array('id' => '', 'name' => '');
+    }
+
+    /**
+     * Line items for one packed box, with qty, value, HS code, and origin.
+     *
+     * @param mixed[] $box_items
+     * @return array<int, array<string, mixed>>
+     */
+    private function build_shipment_items(WC_Order $order, array $box_items, string $destination_country = ''): array {
+        $line_lookup = array();
+        foreach ($order->get_items() as $item) {
+            if (!$item instanceof WC_Order_Item_Product) {
+                continue;
+            }
+            $product = $item->get_product();
+            if (!$product || !$product->needs_shipping()) {
+                continue;
+            }
+            $line_lookup[(int) $product->get_id()] = $item;
+            $parent_id = (int) $product->get_parent_id();
+            if ($parent_id && !isset($line_lookup[$parent_id])) {
+                $line_lookup[$parent_id] = $item;
+            }
+        }
+
+        if (empty($box_items)) {
+            $seen_item_ids = array();
+            foreach ($order->get_items() as $item) {
+                if (!$item instanceof WC_Order_Item_Product) {
+                    continue;
+                }
+                $item_id = (int) $item->get_id();
+                if ($item_id && isset($seen_item_ids[$item_id])) {
+                    continue;
+                }
+                $seen_item_ids[$item_id] = true;
+                $product = $item->get_product();
+                if (!$product || !$product->needs_shipping()) {
+                    continue;
+                }
+                $box_items[] = array(
+                    'product_id'  => (int) $product->get_id(),
+                    'description' => $item->get_name(),
+                    'quantity'    => max(1, (int) $item->get_quantity()),
+                );
+            }
+        }
+
+        $rows = array();
+        foreach ($box_items as $box_item) {
+            $description = '';
+            $quantity = 1;
+            $product_id = 0;
+            if (is_array($box_item)) {
+                $description = (string) ($box_item['description'] ?? '');
+                $quantity = max(1, (int) ($box_item['quantity'] ?? 1));
+                $product_id = (int) ($box_item['product_id'] ?? 0);
+            } else {
+                $description = (string) $box_item;
+            }
+
+            $item = $product_id > 0 ? ($line_lookup[$product_id] ?? null) : null;
+            if (!$item instanceof WC_Order_Item_Product) {
+                foreach ($line_lookup as $candidate) {
+                    if ($candidate->get_name() === $description) {
+                        $item = $candidate;
+                        break;
+                    }
+                }
+            }
+
+            $product = $item instanceof WC_Order_Item_Product ? $item->get_product() : ($product_id ? wc_get_product($product_id) : null);
+            $customs = TNXL_Product::get_customs_details($product);
+            $item_hs = $item instanceof WC_Order_Item_Product
+                ? TNXL_Product::normalize_hs_code($item->get_meta('_tnxl_hs_code') ?: $item->get_meta('_hs_code'))
+                : '';
+
+            $unit_value = 0.0;
+            if ($item instanceof WC_Order_Item_Product) {
+                $item_qty = max(1, (int) $item->get_quantity());
+                $unit_value = (float) $item->get_subtotal() / $item_qty;
+            }
+            if ($unit_value <= 0 && $product instanceof WC_Product) {
+                $unit_value = (float) $product->get_price();
+            }
+            $unit_value = round($unit_value, 2);
+
+            $name = $description !== '' ? $description : ($item ? $item->get_name() : __('Item', 'thai-nexus-logistics'));
+            $origin = $customs['country_of_origin'] !== '' ? $customs['country_of_origin'] : 'TH';
+            $hs = $item_hs !== '' ? $item_hs : TNXL_Product::resolve_hs_code($product, $name, $destination_country);
+
+            $rows[] = array(
+                'description'       => $name,
+                'quantity'          => $quantity,
+                'qty'               => $quantity,
+                'declared_value'    => $unit_value,
+                'value'             => $unit_value,
+                'hs_code'           => $hs,
+                'country_of_origin' => $origin,
+                'origin'            => $origin,
+                'sku'               => $product instanceof WC_Product ? (string) $product->get_sku() : '',
+            );
+        }
+
+        return $rows;
     }
 
     /**
@@ -404,16 +595,28 @@ class TNXL_Order {
                 }
                 $box = is_array($packed_boxes) ? ($packed_boxes[$index] ?? null) : null;
                 $box_info = $box ? " ({$box['length']}x{$box['width']}x{$box['height']} cm, {$box['weight']} kg)" : "";
+                $tnx = TNXL_Tracking::extract_tnx_code($shipment);
                 echo '<li style="margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f1;">';
                 echo '<code style="background: #f0f0f1; padding: 2px 4px; border-radius: 4px;">' . esc_html($shipment['request_number'] ?? '') . '</code>';
                 echo '<span style="float: right; color: #dc2626; font-weight: bold; font-size: 11px; text-transform: uppercase;">' . esc_html($shipment['status'] ?? '') . '</span>';
                 echo '<div style="font-size: 11px; color: #64748b; margin-top: 4px;">' . esc_html__('Box', 'thai-nexus-logistics') . ' ' . absint($index + 1) . esc_html($box_info) . '</div>';
+                if ($tnx !== '') {
+                    echo '<div style="font-size: 11px; margin-top: 4px;"><a href="' . esc_url(TNXL_Tracking::get_tracking_url($tnx)) . '" target="_blank" rel="noopener noreferrer">' . esc_html($tnx) . '</a></div>';
+                } else {
+                    echo '<div style="font-size: 11px; color: #94a3b8; margin-top: 4px;">' . esc_html__('Tracking number not generated yet', 'thai-nexus-logistics') . '</div>';
+                }
                 echo '</li>';
             }
             echo '</ul>';
         } else {
             echo '<p><strong>' . esc_html__('Request Number:', 'thai-nexus-logistics') . '</strong> <code style="background: #f0f0f1; padding: 2px 4px; border-radius: 4px;">' . esc_html($req_num) . '</code></p>';
             echo '<p><strong>' . esc_html__('Status:', 'thai-nexus-logistics') . '</strong> <span style="color: #dc2626; font-weight: bold;">' . esc_html($status) . '</span></p>';
+            $legacy_tnx = TNXL_Tracking::extract_tnx_code(array(
+                'tnx_tracking_number' => $order->get_meta('_tnxl_tnx_tracking_number'),
+            ));
+            if ($legacy_tnx !== '') {
+                echo '<p><strong>' . esc_html__('Tracking:', 'thai-nexus-logistics') . '</strong> <a href="' . esc_url(TNXL_Tracking::get_tracking_url($legacy_tnx)) . '" target="_blank" rel="noopener noreferrer">' . esc_html($legacy_tnx) . '</a></p>';
+            }
         }
 
         echo '<hr />';

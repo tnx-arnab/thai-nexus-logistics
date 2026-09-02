@@ -2,8 +2,8 @@
 Contributors: thainexus
 Tags: woocommerce shipping, shipping rates, currency converter, thailand shipping, shipping calculator
 Requires at least: 5.8
-Tested up to: 7.0
-Stable tag: 1.5.11
+Tested up to: 7.1
+Stable tag: 1.5.14
 Requires PHP: 8.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -40,10 +40,15 @@ This plugin connects to external APIs to provide logistics and currency conversi
 
     *Shipment creation (order processing):* Your store API token; shipper details from plugin settings (name, phone, address, city, state, postal code, country); the customer's shipping name and phone (shipping phone, or billing phone if shipping phone is empty); full shipping address (address lines, city, state, postal code, country); and per-box package data (weight, length, width, height), shipment type, and a description listing the product names in each box. Customer email is never sent.
 
+    *Shipment status sync (hourly):* Your store API token and the shipment request number, to fetch the TNX tracking code and current status. No extra customer personal data is sent.
+
     * [Terms of Service](https://app.thainexus.co.th/termsofservice) | [Privacy Policy](https://app.thainexus.co.th/privacypolicy)
 
-- *Frankfurter API* (`api.frankfurter.app`): Used to fetch exchange rates for currency conversion (for example, THB to your store currency or USD). Each request is a server-side GET with only the source and target currency codes in the URL query string (for example, `from=THB&to=USD`). No customer, order, product, or store identity data is sent. The public Frankfurter API may be proxied through Cloudflare, which may collect basic connection analytics as described in [Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/).
+- *Frankfurter API* (`api.frankfurter.dev`): Used to fetch exchange rates for currency conversion (for example, THB to your store currency or USD). Each request is a server-side GET with only the source and target currency codes in the URL path (for example, `/v2/rate/THB/USD`). No customer, order, product, or store identity data is sent. The public Frankfurter API may be proxied through Cloudflare, which may collect basic connection analytics as described in [Cloudflare's privacy policy](https://www.cloudflare.com/privacypolicy/).
     * [Terms of Use (MIT License)](https://github.com/lineofflight/frankfurter/blob/main/LICENSE) | [Privacy Information](https://frankfurter.dev/)
+
+- *ExchangeRate-API* (`open.er-api.com`): Fallback used when Frankfurter does not support the store currency (for example, THB to QAR). Each request is a server-side GET with only an ISO 4217 currency code in the URL path (for example, `/v6/latest/THB`). No customer, order, product, or store identity data is sent. Responses are cached for 24 hours. Attribution: [Rates By Exchange Rate API](https://www.exchangerate-api.com).
+    * [Terms of Use](https://www.exchangerate-api.com/terms) | [Open Access Docs](https://www.exchangerate-api.com/docs/free)
 
 == Installation ==
 
@@ -61,7 +66,7 @@ Yes, you need an active account and an API token from [Thai Nexus](https://app.t
 Yes. Thai Nexus Logistics fully supports both the modern WooCommerce Checkout and Cart blocks and the classic checkout.
 
 = How does the currency conversion work? =
-The plugin fetches live exchange rates and converts Thai Baht (THB) shipping rates into your store's active currency, so international customers see shipping costs in a currency they understand.
+The plugin fetches live exchange rates and converts Thai Baht (THB) shipping rates into your store's active currency, so international customers see shipping costs in a currency they understand. Frankfurter is used first; if that pair is unsupported, [ExchangeRate-API](https://www.exchangerate-api.com) is used as a fallback.
 
 = Can I use this for international shipping as well as domestic Thailand shipping? =
 Yes. The plugin calculates shipping rates based on the destination address, supporting both domestic Thailand shipping and international parcel and document shipments.
@@ -77,6 +82,19 @@ Yes. Rates are fetched live from the Thai Nexus API at checkout based on the act
 4. Thai Nexus shipping options with live rates at WooCommerce checkout.
 
 == Changelog ==
+
+= 1.5.14 =
+* Feature: Show TNX tracking numbers and Track links on My Account, thank you, Processing/Completed emails, and customer notes when the code is generated.
+* Feature: Hourly sync of shipment status and TNX codes onto WooCommerce orders; complete the order when all boxes are delivered.
+* Feature: Admin Shipments details and order meta box show the TNX tracking link when available.
+* Fix: Convert THB shipping amounts into store currencies Frankfurter does not support (for example QAR) via ExchangeRate-API fallback.
+
+= 1.5.13 =
+* Fix: Register Checkout Block assets with the current WooCommerce Blocks integration hook.
+* Fix: Expose shipping commission data through the Store API endpoint extension API.
+
+= 1.5.12 =
+* Compatibility: Tested up to WordPress 7.1.
 
 = 1.5.11 =
 * Feature: Enable or disable individual courier services from Settings so only selected carriers appear at checkout.

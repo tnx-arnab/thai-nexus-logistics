@@ -147,6 +147,75 @@ class TNXL_API {
     }
 
     /**
+     * Suggest a 6-digit HS code from an item description.
+     */
+    public function suggest_hs_code(string $description, string $destination_country = ''): string {
+        $name = trim($description);
+        if (strlen($name) < 2) {
+            return '';
+        }
+
+        $cache_key = 'tnxl_hs_' . md5(strtolower($name) . '|' . strtoupper($destination_country));
+        $cached = get_transient($cache_key);
+        if (is_string($cached)) {
+            return TNXL_Product::normalize_hs_code($cached);
+        }
+
+        $response = wp_remote_post($this->base_url . 'suggestHsCode', array(
+            'headers' => array(
+                'Content-Type' => 'application/json',
+                'Accept'       => 'application/json',
+            ),
+            'body'    => wp_json_encode(array(
+                'description'         => $name,
+                'destination_country' => $destination_country,
+            )),
+            'timeout' => 8,
+        ));
+
+        if (is_wp_error($response)) {
+            set_transient($cache_key, '', 10 * MINUTE_IN_SECONDS);
+            return '';
+        }
+
+        $status = (int) wp_remote_retrieve_response_code($response);
+        $body = json_decode((string) wp_remote_retrieve_body($response), true);
+        if ($status >= 400 || !is_array($body)) {
+            set_transient($cache_key, '', 10 * MINUTE_IN_SECONDS);
+            return '';
+        }
+        $options = is_array($body['options'] ?? null) ? $body['options'] : array();
+        $ranked = array();
+        foreach ($options as $option) {
+            $code = TNXL_Product::normalize_hs_code($option['hs_code'] ?? '');
+            if ($code === '') {
+                continue;
+            }
+            $ranked[] = array(
+                'hs_code'    => $code,
+                'confidence' => strtolower((string) ($option['confidence'] ?? '')),
+            );
+        }
+
+        $preferred = '';
+        foreach (array('high', 'medium') as $level) {
+            foreach ($ranked as $row) {
+                if ($row['confidence'] === $level) {
+                    $preferred = $row['hs_code'];
+                    break 2;
+                }
+            }
+        }
+        if ($preferred === '' && !empty($ranked)) {
+            $preferred = $ranked[0]['hs_code'];
+        }
+
+        set_transient($cache_key, $preferred, $preferred !== '' ? WEEK_IN_SECONDS : 10 * MINUTE_IN_SECONDS);
+
+        return $preferred;
+    }
+
+    /**
      * Generic Request Handler
      */
     private function request($endpoint, $payload) {

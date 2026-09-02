@@ -77,6 +77,12 @@ class TNXL_REST_API {
             'permission_callback' => array($this, 'check_permission'),
         ));
 
+        register_rest_route('tnxl/v1', '/shipments/(?P<request_number>[a-zA-Z0-9-]+)/sync', array(
+            'methods'             => 'POST',
+            'callback'            => array($this, 'sync_shipment'),
+            'permission_callback' => array($this, 'check_permission'),
+        ));
+
         register_rest_route('tnxl/v1', '/shipments/(?P<request_number>[a-zA-Z0-9-]+)', array(
             'methods'             => 'GET',
             'callback'            => array($this, 'get_shipment_details'),
@@ -254,6 +260,12 @@ class TNXL_REST_API {
             return new WP_Error('tnxl_error', $response->get_error_message(), array('status' => 500));
         }
 
+        if (isset($response['data']) && is_array($response['data'])) {
+            $response['data'] = array_map(static function ($item) {
+                return is_array($item) ? TNXL_Tracking::normalize_shipment($item) : $item;
+            }, $response['data']);
+        }
+
         return rest_ensure_response($response);
     }
 
@@ -277,8 +289,36 @@ class TNXL_REST_API {
             return new WP_Error('tnxl_error', $response->get_error_message(), array('status' => 500));
         }
 
-        // Return the 'data' part which contains the shipment entity
-        return rest_ensure_response(isset($response['data']) ? $response['data'] : $response);
+        $data = isset($response['data']) ? $response['data'] : $response;
+        if (is_array($data)) {
+            $data = TNXL_Tracking::normalize_shipment($data);
+        }
+
+        return rest_ensure_response($data);
+    }
+
+    public function sync_shipment($request) {
+        if (!TNXL_Settings::are_services_active()) {
+            return new WP_Error(
+                'tnxl_not_configured',
+                __('Thai Nexus API token is not configured.', 'thai-nexus-logistics'),
+                array('status' => 403)
+            );
+        }
+
+        $result = TNXL_Tracking_Sync::get_instance()->sync_request_number(
+            (string) $request['request_number']
+        );
+
+        if (is_wp_error($result)) {
+            return new WP_Error(
+                'tnxl_error',
+                $result->get_error_message(),
+                array('status' => 500)
+            );
+        }
+
+        return rest_ensure_response($result);
     }
 
     public function search_products($request) {

@@ -141,6 +141,15 @@ class TNXL_Shipping_Method extends WC_Shipping_Method {
         if (class_exists('TNXL_Currency')) {
             $rate = TNXL_Currency::get_instance()->get_rate('THB', $target_currency);
         }
+        $needs_conversion = strtoupper((string) $target_currency) !== 'THB';
+        $has_rate = is_numeric($rate) && (float) $rate > 0;
+
+        if ($needs_conversion && !$has_rate) {
+            $this->maybe_add_packing_notices(array(
+                __('Thai Nexus shipping rates could not be converted to your store currency. Please try again.', 'thai-nexus-logistics'),
+            ));
+            return;
+        }
 
         $commission = 0;
         if (class_exists('TNXL_Commission')) {
@@ -233,8 +242,8 @@ class TNXL_Shipping_Method extends WC_Shipping_Method {
             }
 
             $cost = $data['total_price'];
-            if ($rate) {
-                $cost = $cost * $rate;
+            if ($has_rate) {
+                $cost = $cost * (float) $rate;
             }
 
             // Add hidden commission buffer
@@ -249,6 +258,7 @@ class TNXL_Shipping_Method extends WC_Shipping_Method {
                 'cost'  => $cost,
                 'meta_data' => array(
                     'tnxl_courier' => $courier,
+                    'tnxl_courier_display' => $data['display_name'],
                     'tnxl_boxes'   => $packed_boxes,
                     'tnxl_breakdown' => array(
                         'base_price' => $cost - $commission,

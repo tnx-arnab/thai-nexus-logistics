@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Thai Nexus Logistics - International Shipping Rates & Currency Converter for WooCommerce
  * Description: Real-time WooCommerce shipping rates, automated shipments, and multi-currency conversion for Thailand and international orders via the Thai Nexus API.
- * Version: 1.5.11
+ * Version: 1.5.14
  * Author: Thai Nexus
  * Author URI: https://app.thainexus.co.th
  * Text Domain: thai-nexus-logistics
@@ -10,13 +10,13 @@
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Requires at least: 5.8
  * Requires PHP: 8.2
- * Tested up to: 7.0
+ * Tested up to: 7.1
  */
 
 if (!defined('ABSPATH')) exit;
 
 // Release line: stay on 1.5.x (patch) until explicitly approved for 1.6+.
-define('TNXL_VERSION', '1.5.11');
+define('TNXL_VERSION', '1.5.14');
 define('TNXL_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('TNXL_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('TNXL_DEBUG', false);
@@ -124,6 +124,8 @@ class Thai_Nexus_Logistics {
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-debug-logger.php';
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-rest-api.php';
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-currency.php';
+        require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-tracking.php';
+        require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-tracking-sync.php';
     }
 
     public function init() {
@@ -154,6 +156,7 @@ class Thai_Nexus_Logistics {
         TNXL_REST_API::get_instance();
         TNXL_Product::get_instance();
         TNXL_Order::get_instance();
+        TNXL_Tracking_Sync::get_instance();
 
         if (!TNXL_Settings::are_services_active()) {
             add_action('admin_notices', array($this, 'api_token_missing_notice'));
@@ -175,7 +178,12 @@ class Thai_Nexus_Logistics {
             add_filter('woocommerce_cart_shipping_packages', array($this, 'force_shipping_recalculation'));
             add_action('woocommerce_checkout_update_order_review', array($this, 'force_refresh_shipping'));
             add_action('woocommerce_store_api_cart_update_customer_from_request', array($this, 'force_refresh_shipping'), 10, 2);
-            add_action('woocommerce_blocks_loaded', array($this, 'register_block_integration'));
+            // WooCommerce may fire woocommerce_blocks_loaded before plugins_loaded:20.
+            if (did_action('woocommerce_blocks_loaded')) {
+                $this->register_block_integration();
+            } else {
+                add_action('woocommerce_blocks_loaded', array($this, 'register_block_integration'));
+            }
             add_filter('woocommerce_package_rates', array($this, 'inject_global_rates'), 99, 2);
             add_filter('woocommerce_cart_ready_to_calc_shipping', array($this, 'maybe_hide_shipping_on_cart'), 99);
         }
@@ -300,24 +308,39 @@ class Thai_Nexus_Logistics {
         }
 
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-checkout-block-integration.php';
-        
-        add_action('woocommerce_register_main_checkout_block_integration', function($integration_registry) {
+
+        add_action('woocommerce_blocks_checkout_block_registration', function ($integration_registry) {
             $integration_registry->register(new TNXL_Checkout_Block_Integration());
         });
 
-        // Expose commission breakdown to Store API (Checkout Blocks)
-        add_filter('woocommerce_store_api_cart_extensions', function($extensions) {
-            if (!TNXL_Settings::can_fetch_checkout_rates()) {
-                return $extensions;
-            }
-            if (!is_array($extensions)) {
-                $extensions = array();
-            }
-            $extensions['tnxl-shipping'] = array(
-                'commission' => TNXL_Commission::get_instance()->get_total_commission(),
+        // Expose commission breakdown to Store API (Checkout Blocks).
+        if (function_exists('woocommerce_store_api_register_endpoint_data')) {
+            woocommerce_store_api_register_endpoint_data(
+                array(
+                    'endpoint'        => 'cart',
+                    'namespace'       => 'tnxl-shipping',
+                    'data_callback'   => static function () {
+                        if (!TNXL_Settings::can_fetch_checkout_rates()) {
+                            return array();
+                        }
+                        return array(
+                            'commission' => TNXL_Commission::get_instance()->get_total_commission(),
+                        );
+                    },
+                    'schema_callback' => static function () {
+                        return array(
+                            'commission' => array(
+                                'description' => __('Total Thai Nexus commission buffer applied to shipping.', 'thai-nexus-logistics'),
+                                'type'        => 'number',
+                                'context'     => array('view', 'edit'),
+                                'readonly'    => true,
+                            ),
+                        );
+                    },
+                    'schema_type'     => ARRAY_A,
+                )
             );
-            return $extensions;
-        });
+        }
     }
 
     public function register_shipping_method($methods) {
@@ -412,6 +435,11 @@ class Thai_Nexus_Logistics {
         <?php
     }
 }
+
+register_deactivation_hook(__FILE__, static function () {
+    require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-tracking-sync.php';
+    TNXL_Tracking_Sync::unschedule();
+});
 
 // Start the plugin
 Thai_Nexus_Logistics::get_instance();
