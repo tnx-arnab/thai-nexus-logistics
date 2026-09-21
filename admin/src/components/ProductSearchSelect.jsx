@@ -25,6 +25,7 @@ const ProductSearchSelect = ({
     const ids = selectedProducts.map(Number).filter(Boolean);
 
     if (ids.length === 0) {
+      setSelectedDetails([]);
       return () => {
         cancelled = true;
       };

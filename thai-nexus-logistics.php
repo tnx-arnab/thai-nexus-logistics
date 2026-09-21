@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Thai Nexus Logistics - International Shipping Rates & Currency Converter for WooCommerce
  * Description: Real-time WooCommerce shipping rates, automated shipments, and multi-currency conversion for Thailand and international orders via the Thai Nexus API.
- * Version: 1.5.14
+ * Version: 1.5.15
  * Author: Thai Nexus
  * Author URI: https://app.thainexus.co.th
  * Text Domain: thai-nexus-logistics
@@ -16,7 +16,7 @@
 if (!defined('ABSPATH')) exit;
 
 // Release line: stay on 1.5.x (patch) until explicitly approved for 1.6+.
-define('TNXL_VERSION', '1.5.14');
+define('TNXL_VERSION', '1.5.15');
 define('TNXL_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('TNXL_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('TNXL_DEBUG', false);
@@ -118,6 +118,7 @@ class Thai_Nexus_Logistics {
     private function load_dependencies() {
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-settings.php';
         TNXL_Settings::init();
+        require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-service-coverage.php';
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-migration.php';
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-api.php';
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-admin.php';
@@ -140,12 +141,13 @@ class Thai_Nexus_Logistics {
 
         if (!class_exists('DVDoug\BoxPacker\Packer')) {
             add_action('admin_notices', array($this, 'boxpacker_missing_notice'));
-            return;
         }
 
         // Load WooCommerce dependent files
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-product.php';
-        require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-box-packer.php';
+        if (class_exists('DVDoug\BoxPacker\Packer')) {
+            require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-box-packer.php';
+        }
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-shipping-method.php';
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-order.php';
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-commission.php';
@@ -163,7 +165,9 @@ class Thai_Nexus_Logistics {
             return;
         }
 
-        TNXL_Box_Packer::get_instance();
+        if (class_exists('TNXL_Box_Packer')) {
+            TNXL_Box_Packer::get_instance();
+        }
 
         $needs_shipping_method = TNXL_Settings::can_fetch_checkout_rates()
             || TNXL_Settings::is_auto_shipment_enabled();
@@ -218,6 +222,12 @@ class Thai_Nexus_Logistics {
         // Double check: if we are in cart context, don't inject rates
         if ($this->maybe_hide_shipping_on_cart(true) === false) {
             return $rates;
+        }
+
+        foreach ($rates as $rate) {
+            if ($rate instanceof WC_Shipping_Rate && $rate->get_method_id() === 'tnxl_shipping') {
+                return $rates;
+            }
         }
 
         try {

@@ -155,11 +155,13 @@ class TNXL_Product {
             }
         }
 
+        $weight = (float) wc_get_weight($values['weight'], 'kg');
+
         return array(
             'length' => (float) wc_get_dimension($values['length'], 'cm'),
             'width'  => (float) wc_get_dimension($values['width'], 'cm'),
             'height' => (float) wc_get_dimension($values['height'], 'cm'),
-            'weight' => (float) wc_get_weight($values['weight'], 'kg'),
+            'weight' => $weight,
         );
     }
 

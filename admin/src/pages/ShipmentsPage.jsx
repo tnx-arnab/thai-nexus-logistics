@@ -60,7 +60,8 @@ const ShipmentsPage = () => {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState('');
-  const [errorType, setErrorType] = useState(null); // 'auth' | 'general'
+  const [searchQuery, setSearchQuery] = useState('');
+  const [errorType, setErrorType] = useState(null);
 
   useEffect(() => {
     fetchShipments();
@@ -180,12 +181,14 @@ const ShipmentsPage = () => {
               {total || shipments.length} total
             </span>
           </h2>
-          
+
           <div className="relative group">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-3.5 h-3.5 z-10 group-focus-within:text-primary transition-colors" />
-            <input 
-              type="text" 
-              placeholder="Search request number..." 
+            <input
+              type="text"
+              placeholder="Search request number or status..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="tnxl-input !pl-9 py-1.5 text-xs w-full md:w-56 relative border-gray-100 bg-gray-50/50 focus:bg-white"
             />
           </div>
@@ -220,7 +223,13 @@ const ShipmentsPage = () => {
                     </p>
                   </td>
                 </tr>
-              ) : shipments.length === 0 ? (
+              ) : shipments.filter((shipment) => {
+                const q = searchQuery.trim().toLowerCase();
+                if (!q) return true;
+                const request = String(shipment.request_number || '').toLowerCase();
+                const status = String(shipment.status || '').toLowerCase();
+                return request.includes(q) || status.includes(q);
+              }).length === 0 ? (
                 <tr>
                   <td colSpan={5} className="py-16 text-center animate-in fade-in zoom-in duration-300">
                     <Package className="w-12 h-12 text-gray-100 mx-auto mb-4" />
@@ -229,9 +238,15 @@ const ShipmentsPage = () => {
                   </td>
                 </tr>
               ) : (
-                shipments.map((shipment, index) => (
-                  <tr 
-                    key={shipment.id} 
+                shipments.filter((shipment) => {
+                  const q = searchQuery.trim().toLowerCase();
+                  if (!q) return true;
+                  const request = String(shipment.request_number || '').toLowerCase();
+                  const status = String(shipment.status || '').toLowerCase();
+                  return request.includes(q) || status.includes(q);
+                }).map((shipment, index) => (
+                  <tr
+                    key={shipment.id}
                     style={{ animationDelay: `${index * 30}ms` }}
                     className="hover:bg-blue-50/20 transition-all group animate-in fade-in slide-in-from-left-1 duration-200"
                   >
@@ -255,7 +270,7 @@ const ShipmentsPage = () => {
                       {formatDate(shipment.submitted_date || shipment.created_at)}
                     </td>
                     <td className="px-5 py-3 text-right">
-                      <button 
+                      <button
                         onClick={() => fetchShipmentDetails(shipment.request_number)}
                         className="text-gray-300 hover:text-primary p-1.5 hover:bg-white rounded-md transition-all shadow-none hover:shadow-sm"
                       >
@@ -276,14 +291,14 @@ const ShipmentsPage = () => {
               Showing <span className="font-bold text-secondary">{(page-1)*10 + 1}</span> to <span className="font-bold text-secondary">{Math.min(page*10, total || shipments.length)}</span>
             </p>
             <div className="flex gap-1.5">
-              <button 
+              <button
                 disabled={page === 1 || loading}
                 onClick={() => setPage(p => p - 1)}
                 className="p-1.5 border border-gray-200 rounded-lg hover:bg-white disabled:opacity-30 transition-all bg-white/50"
               >
                 <ChevronLeft size={16} />
               </button>
-              <button 
+              <button
                 disabled={loading || (total > 0 && page * 10 >= total)}
                 onClick={() => setPage(p => p + 1)}
                 className="p-1.5 border border-gray-200 rounded-lg hover:bg-white disabled:opacity-30 transition-all bg-white/50"
@@ -340,7 +355,7 @@ const ShipmentsPage = () => {
                   ) : null}
                 </div>
               </div>
-              <button 
+              <button
                 onClick={() => setSelectedShipment(null)}
                 className="p-2 bg-white/5 hover:bg-white/15 text-white rounded-xl transition-all border border-white/10 group shadow-sm"
               >
@@ -370,7 +385,7 @@ const ShipmentsPage = () => {
                             <Phone size={12} className="text-primary" /> {getAddress(selectedShipment, 'shipper_address').phone}
                           </p>
                           <p className="text-xs text-gray-600 leading-relaxed flex items-start gap-2">
-                            <MapPin size={12} className="text-primary mt-0.5 shrink-0" /> 
+                            <MapPin size={12} className="text-primary mt-0.5 shrink-0" />
                             <span>{getAddress(selectedShipment, 'shipper_address').address_line1 || getAddress(selectedShipment, 'shipper_address').address}, <span className="font-bold text-gray-400">{getAddress(selectedShipment, 'shipper_address').city}, {getAddress(selectedShipment, 'shipper_address').country}</span></span>
                           </p>
                         </div>
@@ -389,7 +404,7 @@ const ShipmentsPage = () => {
                             <Phone size={12} className="text-blue-500" /> {getAddress(selectedShipment, 'consignee_address').phone}
                           </p>
                           <p className="text-xs text-gray-600 leading-relaxed flex items-start gap-2">
-                            <MapPin size={12} className="text-blue-500 mt-0.5 shrink-0" /> 
+                            <MapPin size={12} className="text-blue-500 mt-0.5 shrink-0" />
                             <span>{getAddress(selectedShipment, 'consignee_address').address_line1 || getAddress(selectedShipment, 'consignee_address').address}, <span className="font-bold text-gray-400">{getAddress(selectedShipment, 'consignee_address').city}, {getAddress(selectedShipment, 'consignee_address').country}</span></span>
                           </p>
                         </div>
@@ -415,7 +430,7 @@ const ShipmentsPage = () => {
                         </div>
                       ))}
                     </div>
-                    
+
                     <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex items-start gap-3">
                        <Tag className="text-secondary/20 w-4 h-4 mt-0.5 shrink-0" />
                        <div className="min-w-0">
@@ -445,7 +460,7 @@ const ShipmentsPage = () => {
                   {syncing ? <Loader2 size={14} className="animate-spin" /> : <RefreshCw size={14} />}
                   Sync tracking
                 </button>
-                <button 
+                <button
                   type="button"
                   onClick={() => {
                     setSelectedShipment(null);

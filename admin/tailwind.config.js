@@ -8,12 +8,12 @@ export default {
     extend: {
       colors: {
         primary: {
-          DEFAULT: '#dc2626', // Red
-          hover: '#b91c1c',
+          DEFAULT: '#272262',
+          hover: '#1e1a4d',
         },
         secondary: {
-          DEFAULT: '#272262', // Dark Blue/Purple
-          hover: '#1e1a4d',
+          DEFAULT: '#bf1d2d',
+          hover: '#9f1824',
         },
       }
     },

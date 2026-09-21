@@ -2,6 +2,7 @@ import { useCallback, useState, useEffect } from 'react';
 import { Save, Key, MapPin, Phone, User, CheckCircle2, AlertCircle, Loader2, ToggleLeft, ToggleRight, Zap, Package, Truck, Wifi, Info } from 'lucide-react';
 import axios from 'axios';
 import ProductSearchSelect from '../components/ProductSearchSelect';
+import CountryMultiSelect from '../components/CountryMultiSelect';
 
 const normalizeServiceId = (value) => String(value || '')
   .trim()
@@ -9,7 +10,19 @@ const normalizeServiceId = (value) => String(value || '')
   .replace(/\s+/g, '_')
   .replace(/[^a-z0-9_-]/g, '');
 
-const SettingsPage = () => {
+const serviceKeys = (service) => {
+  const seen = new Set();
+  const keys = [];
+  for (const raw of [service.id, service.service_name, service.name]) {
+    const id = normalizeServiceId(raw);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    keys.push(id);
+  }
+  return keys;
+};
+
+const SettingsPage = ({ onSaved }) => {
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
@@ -21,6 +34,9 @@ const SettingsPage = () => {
     },
     disabled_service_ids: [],
     shipping_ineligible_product_ids: [],
+    product_weight_unit: 'kg',
+    charge_actual_weight_only: false,
+    service_coverage: {},
     shipper: {
       name: '',
       phone: '',
@@ -80,6 +96,9 @@ const SettingsPage = () => {
         },
         disabled_service_ids: response.data?.disabled_service_ids || [],
         shipping_ineligible_product_ids: response.data?.shipping_ineligible_product_ids || [],
+        product_weight_unit: response.data?.product_weight_unit === 'g' ? 'g' : 'kg',
+        charge_actual_weight_only: Boolean(response.data?.charge_actual_weight_only),
+        service_coverage: response.data?.service_coverage || {},
       });
       if (response.data?.api_token) {
         void fetchShippingServices();
@@ -118,14 +137,31 @@ const SettingsPage = () => {
     }
   };
 
-  const toggleService = (serviceId, enabled) => {
-    const id = normalizeServiceId(serviceId);
+  const toggleService = (service, enabled) => {
+    const ids = serviceKeys(service);
     setSettings((previous) => ({
       ...previous,
       disabled_service_ids: enabled
-        ? previous.disabled_service_ids.filter((item) => item !== id)
-        : [...new Set([...previous.disabled_service_ids, id])],
+        ? previous.disabled_service_ids.filter((item) => !ids.includes(item))
+        : [...new Set([...previous.disabled_service_ids, ...ids])],
     }));
+  };
+
+  const coverageFor = (service) => {
+    for (const id of serviceKeys(service)) {
+      if (settings.service_coverage?.[id]) return settings.service_coverage[id];
+    }
+    return { worldwide: true, countries: [] };
+  };
+
+  const setCoverage = (service, next) => {
+    setSettings((prev) => {
+      const merged = { ...(prev.service_coverage || {}) };
+      for (const id of serviceKeys(service)) {
+        merged[id] = next;
+      }
+      return { ...prev, service_coverage: merged };
+    });
   };
 
   const handleSave = async (e) => {
@@ -141,6 +177,9 @@ const SettingsPage = () => {
         }
       });
       setMessage({ type: 'success', text: 'Settings saved successfully!' });
+      if (typeof onSaved === 'function') {
+        onSaved(settings);
+      }
       if (settings.api_token) {
         void fetchShippingServices();
       } else {
@@ -167,8 +206,8 @@ const SettingsPage = () => {
     <form onSubmit={handleSave} className="space-y-8">
       {/* Feature toggles */}
       <div className="tnxl-card">
-        <div className="bg-secondary p-5 flex items-center gap-3">
-          <Zap className="text-primary w-6 h-6" />
+        <div className="bg-primary p-5 flex items-center gap-3">
+          <Zap className="text-white w-6 h-6" />
           <h2 className="text-lg font-bold text-white">Automation</h2>
         </div>
         <div className="p-8 space-y-6">
@@ -226,8 +265,8 @@ const SettingsPage = () => {
 
       {/* API Authentication */}
       <div className="tnxl-card">
-        <div className="bg-secondary p-5 flex items-center gap-3">
-          <Key className="text-primary w-6 h-6" />
+        <div className="bg-primary p-5 flex items-center gap-3">
+          <Key className="text-white w-6 h-6" />
           <h2 className="text-lg font-bold text-white">API Authentication</h2>
         </div>
         <div className="p-8">
@@ -270,11 +309,66 @@ const SettingsPage = () => {
         </div>
       </div>
 
+      <div className="tnxl-card">
+        <div className="bg-primary p-5 flex items-center gap-3">
+          <Package className="text-white w-6 h-6" />
+          <h2 className="text-lg font-bold text-white">Product weight and billing</h2>
+        </div>
+        <div className="p-8 space-y-6">
+          <div>
+            <p className="text-sm font-semibold text-gray-700 mb-2">Product weight unit</p>
+            <p className="text-sm text-gray-600 mb-3">
+              How catalog product weights are read. Box inventory stays in kg. Thai Nexus quotes always use kg.
+            </p>
+            <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+              <button
+                type="button"
+                onClick={() => setSettings((s) => ({ ...s, product_weight_unit: 'kg' }))}
+                className={`px-4 py-2 text-sm font-medium rounded-md ${
+                  settings.product_weight_unit === 'kg' ? 'bg-white text-primary shadow-sm' : 'text-gray-600'
+                }`}
+              >
+                KG
+              </button>
+              <button
+                type="button"
+                onClick={() => setSettings((s) => ({ ...s, product_weight_unit: 'g' }))}
+                className={`px-4 py-2 text-sm font-medium rounded-md ${
+                  settings.product_weight_unit === 'g' ? 'bg-white text-primary shadow-sm' : 'text-gray-600'
+                }`}
+              >
+                Gram
+              </button>
+            </div>
+          </div>
+          <label className="flex items-start gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              className="mt-1 w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+              checked={Boolean(settings.charge_actual_weight_only)}
+              onChange={(e) => setSettings((s) => ({ ...s, charge_actual_weight_only: e.target.checked }))}
+            />
+            <span>
+              <span className="block text-sm font-semibold text-gray-800">Charge actual product weight only</span>
+              <span className="block text-sm text-gray-600 mt-1">
+                Box packing is skipped. Quotes send filler dimensions so volumetric weight stays below product weight.
+              </span>
+            </span>
+          </label>
+          {settings.charge_actual_weight_only ? (
+            <div className="flex gap-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              <Info size={18} className="shrink-0 mt-0.5" />
+              <p>The Boxes tab is hidden. Filler parcel size keeps volumetric weight below actual weight.</p>
+            </div>
+          ) : null}
+        </div>
+      </div>
+
       {/* Shipping services */}
       <div className="tnxl-card">
-        <div className="bg-secondary p-5 flex items-center justify-between gap-4">
+        <div className="bg-primary p-5 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Truck className="text-primary w-6 h-6" />
+            <Truck className="text-white w-6 h-6" />
             <h2 className="text-lg font-bold text-white">Shipping Services</h2>
           </div>
           {services.length > 0 && (
@@ -302,7 +396,9 @@ const SettingsPage = () => {
             <p className="text-sm text-gray-500">No shipping services were returned.</p>
           ) : (
             <div className="space-y-4">
-              <p className="text-sm text-gray-600">Unchecked services will not appear as Thai Nexus checkout options.</p>
+              <p className="text-sm text-gray-600">
+                Unchecked services will not appear as Thai Nexus checkout options. Choose All Available, selected countries, exclude, or rest of world per service.
+              </p>
               <div className="flex gap-4 text-sm">
                 <button
                   type="button"
@@ -323,26 +419,94 @@ const SettingsPage = () => {
                 </button>
               </div>
               <div className="divide-y divide-gray-100 border border-gray-100 rounded-xl">
+                <ul>
                 {services.map((service) => {
                   const id = normalizeServiceId(service.id);
-                  const enabled = !settings.disabled_service_ids.includes(id);
+                  const keys = serviceKeys(service);
+                  const enabled = !keys.some((key) => settings.disabled_service_ids.includes(key));
+                  const coverage = coverageFor(service);
+                  const isExclude = Boolean(coverage.excludeCountries);
+                  const isRestOfWorld = Boolean(coverage.restOfWorld) && !isExclude;
+                  const isWorldwide = coverage.worldwide && !isRestOfWorld && !isExclude;
+                  const isSelected = !isWorldwide && !isRestOfWorld && !isExclude;
                   return (
-                    <label key={id} className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-gray-50">
-                      <input
-                        type="checkbox"
-                        checked={enabled}
-                        onChange={(event) => toggleService(service.id, event.target.checked)}
-                        className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
-                      />
-                      {service.logo
-                        ? <img src={service.logo} alt="" className="w-8 h-8 object-contain" />
-                        : <Truck size={20} className="text-gray-400" />}
-                      <span className="text-sm font-medium text-gray-800">
-                        {service.service_name || service.name || service.id}
-                      </span>
-                    </label>
+                    <li key={id} className="px-4 py-3 hover:bg-gray-50">
+                      <label className="flex items-center gap-4 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={enabled}
+                          onChange={(event) => toggleService(service, event.target.checked)}
+                          className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                        />
+                        {service.logo
+                          ? <img src={service.logo} alt="" className="w-8 h-8 object-contain" />
+                          : <Truck size={20} className="text-gray-400" />}
+                        <span className="text-sm font-medium text-gray-800">
+                          {service.service_name || service.name || service.id}
+                        </span>
+                      </label>
+                      {enabled && (
+                        <div className="mt-3 ml-8 space-y-3">
+                          <div className="flex flex-wrap gap-4 text-sm">
+                            <label className="inline-flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                name={`coverage-${id}`}
+                                checked={isWorldwide}
+                                onChange={() => setCoverage(service, { worldwide: true, countries: [] })}
+                              />
+                              All Available
+                            </label>
+                            <label className="inline-flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                name={`coverage-${id}`}
+                                checked={isSelected}
+                                onChange={() => setCoverage(service, { worldwide: false, countries: coverage.countries || [] })}
+                              />
+                              Selected countries
+                            </label>
+                            <label className="inline-flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                name={`coverage-${id}`}
+                                checked={isExclude}
+                                onChange={() => setCoverage(service, { worldwide: true, excludeCountries: true, countries: coverage.countries || [] })}
+                              />
+                              Exclude countries
+                            </label>
+                            <label className="inline-flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="radio"
+                                name={`coverage-${id}`}
+                                checked={isRestOfWorld}
+                                onChange={() => setCoverage(service, { worldwide: false, restOfWorld: true, countries: [] })}
+                              />
+                              Rest of world
+                            </label>
+                          </div>
+                          {isSelected && (
+                            <CountryMultiSelect
+                              selected={coverage.countries || []}
+                              onChange={(countries) => setCoverage(service, { worldwide: false, countries })}
+                            />
+                          )}
+                          {isExclude && (
+                            <CountryMultiSelect
+                              selected={coverage.countries || []}
+                              placeholder="Search countries to exclude"
+                              onChange={(countries) => setCoverage(service, { worldwide: true, excludeCountries: true, countries })}
+                            />
+                          )}
+                          {isRestOfWorld && (
+                            <p className="text-xs text-gray-500">Shown only when no other enabled service is offered for the destination.</p>
+                          )}
+                        </div>
+                      )}
+                    </li>
                   );
                 })}
+                </ul>
               </div>
             </div>
           )}
@@ -351,8 +515,8 @@ const SettingsPage = () => {
 
       {/* Product eligibility */}
       <div className="tnxl-card">
-        <div className="bg-secondary p-5 flex items-center gap-3">
-          <Package className="text-primary w-6 h-6" />
+        <div className="bg-primary p-5 flex items-center gap-3">
+          <Package className="text-white w-6 h-6" />
           <h2 className="text-lg font-bold text-white">Product Shipping Eligibility</h2>
         </div>
         <div className="p-8 space-y-5">
@@ -379,8 +543,8 @@ const SettingsPage = () => {
 
       {/* Shipper Address */}
       <div className="tnxl-card">
-        <div className="bg-secondary p-5 flex items-center gap-3">
-          <MapPin className="text-primary w-6 h-6" />
+        <div className="bg-primary p-5 flex items-center gap-3">
+          <MapPin className="text-white w-6 h-6" />
           <h2 className="text-lg font-bold text-white">Store Origin Address</h2>
         </div>
         <div className="p-8">
@@ -453,31 +617,14 @@ const SettingsPage = () => {
                 value={settings.shipper.country}
                 onChange={(e) => setSettings({ ...settings, shipper: { ...settings.shipper, country: e.target.value } })}
               >
-                <option value="TH">Thailand</option>
-                {/* Add more countries if needed */}
+                <option value="TH">Thailand (TH)</option>
+                <option value="US">United States (US)</option>
+                <option value="GB">United Kingdom (GB)</option>
+                <option value="AU">Australia (AU)</option>
+                <option value="SG">Singapore (SG)</option>
               </select>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Privacy & Data Disclosure */}
-      <div className="tnxl-card bg-secondary border-secondary">
-        <div className="bg-secondary border-secondary p-5 flex items-center gap-3 ">
-          <AlertCircle className="text-blue-600 w-6 h-6" />
-          <h2 className="text-lg font-bold text-white">Privacy & Data Disclosure</h2>
-        </div>
-        <div className="p-8">
-          <p className="text-black text-sm leading-relaxed">
-            To provide real-time shipping quotations, this plugin securely transmits package dimensions, 
-            weights, and the <strong>customer's shipping address</strong> (Country, City, State, and Postal Code) 
-            to the <a href="https://app.thainexus.co.th/" target="_blank" className="text-primary hover:underline font-medium"> Thai Nexus API</a>. 
-          </p>
-          <p className="text-black  text-sm mt-4 leading-relaxed">
-            Additionally, it communicates with the <a href="https://frankfurter.dev/" target="_blank" rel="noreferrer" className="text-primary hover:underline font-medium">Frankfurter API</a> to fetch current exchange
-            rates, and falls back to <a href="https://www.exchangerate-api.com" target="_blank" rel="noreferrer" className="text-primary hover:underline font-medium">Exchange Rate API</a> for currencies Frankfurter does not cover.
-            No customer PII (Name, Email, Phone) is sent during the quotation phase.
-          </p>
         </div>
       </div>
 

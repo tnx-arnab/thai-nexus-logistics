@@ -161,6 +161,10 @@ class TNXL_Box_Packer {
      * @return TNXL_Packing_Result
      */
     public function pack_items($items) {
+        if (class_exists('TNXL_Settings') && TNXL_Settings::is_actual_weight_only()) {
+            return $this->pack_actual_weight_only($items);
+        }
+
         $result = new TNXL_Packing_Result();
         $box_definitions = get_option('tnxl_box_definitions', []);
 
@@ -306,13 +310,84 @@ class TNXL_Box_Packer {
     }
 
     /**
+     * One parcel from product weights. Filler cube so LWH/5000 stays below actual kg.
+     */
+    private function pack_actual_weight_only($items) {
+        $result = new TNXL_Packing_Result();
+        $total_weight = 0.0;
+        $labels = array();
+        $all_document = true;
+        $has_shipping = false;
+
+        foreach ($items as $item_values) {
+            $product = $item_values['data'] ?? null;
+            if (!$product instanceof WC_Product || !$product->needs_shipping()) {
+                continue;
+            }
+            $has_shipping = true;
+            $qty = max(1, absint($item_values['quantity'] ?? 1));
+            $measurements = TNXL_Product::get_shipping_measurements($product);
+            $wt = $measurements['weight'];
+            if ($wt <= 0) {
+                $result->add_error(sprintf(
+                    __('Product "%s" is missing required shipping weight.', 'thai-nexus-logistics'),
+                    $product->get_name()
+                ));
+                continue;
+            }
+            $total_weight += $wt * $qty;
+            $labels[] = self::box_item_record($product->get_name(), $qty, (int) $product->get_id());
+            if (!TNXL_Product::is_document($product)) {
+                $all_document = false;
+            }
+        }
+
+        if ($result->has_errors()) {
+            return $result;
+        }
+        if (!$has_shipping || $total_weight <= 0) {
+            $result->add_error(__('No shippable items', 'thai-nexus-logistics'));
+            return $result;
+        }
+
+        $dims = self::filler_dims_below_actual_weight($total_weight);
+        $result->add_box(array(
+            'name'   => __('Actual weight', 'thai-nexus-logistics'),
+            'length' => $dims['length'],
+            'width'  => $dims['width'],
+            'height' => $dims['height'],
+            'weight' => $total_weight,
+            'items'  => $labels,
+            'is_document' => $all_document,
+        ));
+
+        return $result;
+    }
+
+    /**
+     * @return array{length:float,width:float,height:float}
+     */
+    public static function filler_dims_below_actual_weight(float $actual_kg): array {
+        $weight = max(0.001, $actual_kg);
+        $max_volume = $weight * 5000 * 0.5;
+        $side = max(1, (int) floor(pow($max_volume, 1 / 3)));
+        while ($side > 1 && (($side * $side * $side) / 5000) >= $weight) {
+            $side -= 1;
+        }
+        if (($side * $side * $side) / 5000 >= $weight) {
+            $side = 1;
+        }
+        return array('length' => (float) $side, 'width' => (float) $side, 'height' => (float) $side);
+    }
+
+    /**
      * Validate all items have dimensions and weight
      */
     private function validate_items($items) {
         $result = new TNXL_Packing_Result();
         foreach ($items as $item_values) {
-            $product = $item_values['data'];
-            if (!$product->needs_shipping()) continue;
+            $product = $item_values['data'] ?? null;
+            if (!$product instanceof WC_Product || !$product->needs_shipping()) continue;
 
             $measurements = TNXL_Product::get_shipping_measurements($product);
             $l = $measurements['length'];
@@ -342,10 +417,10 @@ class TNXL_Box_Packer {
         $max_height = 0;
 
         foreach ($items as $item_values) {
-            $product = $item_values['data'];
+            $product = $item_values['data'] ?? null;
             $qty = $item_values['quantity'];
 
-            if (!$product->needs_shipping()) continue;
+            if (!$product instanceof WC_Product || !$product->needs_shipping()) continue;
 
             $measurements = TNXL_Product::get_shipping_measurements($product);
             $weight = $measurements['weight'];

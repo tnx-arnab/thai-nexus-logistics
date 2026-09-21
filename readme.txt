@@ -3,7 +3,7 @@ Contributors: thainexus
 Tags: woocommerce shipping, shipping rates, currency converter, thailand shipping, shipping calculator
 Requires at least: 5.8
 Tested up to: 7.1
-Stable tag: 1.5.14
+Stable tag: 1.5.15
 Requires PHP: 8.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -82,6 +82,13 @@ Yes. Rates are fetched live from the Thai Nexus API at checkout based on the act
 4. Thai Nexus shipping options with live rates at WooCommerce checkout.
 
 == Changelog ==
+
+= 1.5.15 =
+* Feature: Fees tab with basic/advanced pricing formulas (replaces the old commission rules page).
+* Feature: Per-service destination coverage (include, exclude, rest of world).
+* Feature: Products tab for catalog shipping fields (dimensions, HS code, boxed/document flags).
+* Feature: Privacy tab in the admin dashboard.
+* Fix: Checkout rates honor service coverage and the updated fee engine.
 
 = 1.5.14 =
 * Feature: Show TNX tracking numbers and Track links on My Account, thank you, Processing/Completed emails, and customer notes when the code is generated.

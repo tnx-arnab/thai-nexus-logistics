@@ -15,6 +15,10 @@ class TNXL_Settings {
     public const OPTION_AUTO_SHIPMENTS   = 'tnxl_enable_auto_shipments';
     public const OPTION_DISABLED_SERVICES = 'tnxl_disabled_service_ids';
     public const OPTION_INELIGIBLE_PRODUCTS = 'tnxl_shipping_ineligible_product_ids';
+    public const OPTION_PRODUCT_WEIGHT_UNIT = 'tnxl_product_weight_unit';
+    public const OPTION_ACTUAL_WEIGHT_ONLY = 'tnxl_charge_actual_weight_only';
+    public const OPTION_SERVICE_COVERAGE = 'tnxl_service_coverage';
+    public const OPTION_PRICING_MODE = 'tnxl_pricing_mode';
 
     public static function maybe_register_defaults(): void {
         if (null === get_option(self::OPTION_CHECKOUT_RATES, null)) {
@@ -131,6 +135,106 @@ class TNXL_Settings {
             array_values(array_unique(array_filter(array_map('absint', $ids)))),
             false
         );
+    }
+
+    public static function get_product_weight_unit(): string {
+        $saved = (string) get_option(self::OPTION_PRODUCT_WEIGHT_UNIT, '');
+        if ($saved === 'g' || $saved === 'kg') {
+            return $saved;
+        }
+        return get_option('woocommerce_weight_unit') === 'g' ? 'g' : 'kg';
+    }
+
+    public static function save_product_weight_unit($value): void {
+        $unit = strtolower(trim((string) $value));
+        update_option(self::OPTION_PRODUCT_WEIGHT_UNIT, $unit === 'g' ? 'g' : 'kg', false);
+    }
+
+    public static function is_actual_weight_only(): bool {
+        return self::option_is_yes(self::OPTION_ACTUAL_WEIGHT_ONLY, 'no');
+    }
+
+    public static function save_actual_weight_only($value): void {
+        update_option(self::OPTION_ACTUAL_WEIGHT_ONLY, self::bool_to_yes_no($value), false);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public static function get_service_coverage(): array {
+        $coverage = get_option(self::OPTION_SERVICE_COVERAGE, array());
+        return is_array($coverage) ? $coverage : array();
+    }
+
+    /**
+     * @param array<mixed> $coverage
+     */
+    public static function save_service_coverage(array $coverage): void {
+        $clean = array();
+        foreach ($coverage as $key => $rule) {
+            $id = self::normalize_service_id($key);
+            if ($id === '' || !is_array($rule)) {
+                continue;
+            }
+            $rest = !empty($rule['restOfWorld']) || !empty($rule['rest_of_world']);
+            $exclude = !$rest && (!empty($rule['excludeCountries']) || !empty($rule['exclude_countries']));
+            $worldwide = !$rest && !$exclude && (!isset($rule['worldwide']) || $rule['worldwide']);
+            $countries = array();
+            foreach ((array) ($rule['countries'] ?? array()) as $code) {
+                $iso = strtoupper(preg_replace('/[^A-Za-z]/', '', (string) $code));
+                if (strlen($iso) === 2) {
+                    $countries[] = $iso;
+                }
+            }
+            $countries = array_values(array_unique($countries));
+            if ($rest) {
+                $clean[$id] = array('worldwide' => false, 'restOfWorld' => true, 'countries' => array());
+                continue;
+            }
+            if ($exclude) {
+                $clean[$id] = array('worldwide' => true, 'excludeCountries' => true, 'countries' => $countries);
+                continue;
+            }
+            $clean[$id] = $worldwide
+                ? array('worldwide' => true, 'countries' => array())
+                : array('worldwide' => false, 'countries' => $countries);
+        }
+        update_option(self::OPTION_SERVICE_COVERAGE, $clean, false);
+    }
+
+    public static function get_pricing_mode(): string {
+        $mode = (string) get_option(self::OPTION_PRICING_MODE, '');
+        if ($mode === 'advanced' || $mode === 'basic') {
+            return $mode;
+        }
+
+        $rules = get_option('tnxl_commission_rules', array());
+        if (!is_array($rules) || !class_exists('TNXL_Commission')) {
+            return 'basic';
+        }
+
+        $always_on_with_effect = 0;
+        foreach ($rules as $rule) {
+            if (!is_array($rule)) {
+                continue;
+            }
+            if (!TNXL_Commission::rule_is_always_on($rule)) {
+                return 'advanced';
+            }
+            if (TNXL_Commission::rule_has_effect($rule)) {
+                $always_on_with_effect++;
+                if ($always_on_with_effect > 1) {
+                    return 'advanced';
+                }
+            }
+        }
+
+        return 'basic';
+    }
+
+    public static function save_pricing_mode($value): void {
+        $mode = (string) $value;
+        update_option(self::OPTION_PRICING_MODE, $mode === 'advanced' ? 'advanced' : 'basic', false);
     }
 
     /**

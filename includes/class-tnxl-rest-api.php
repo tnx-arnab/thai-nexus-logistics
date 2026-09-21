@@ -53,6 +53,18 @@ class TNXL_REST_API {
             'permission_callback' => array($this, 'check_permission'),
         ));
 
+        register_rest_route('tnxl/v1', '/product-catalog', array(
+            'methods'             => 'GET',
+            'callback'            => array($this, 'get_product_catalog'),
+            'permission_callback' => array($this, 'check_permission'),
+        ));
+
+        register_rest_route('tnxl/v1', '/products/(?P<id>\d+)', array(
+            'methods'             => 'PUT',
+            'callback'            => array($this, 'update_product'),
+            'permission_callback' => array($this, 'check_permission'),
+        ));
+
         register_rest_route('tnxl/v1', '/search-products', array(
             'methods'             => 'GET',
             'callback'            => array($this, 'search_products'),
@@ -124,9 +136,13 @@ class TNXL_REST_API {
         return array(
             'api_token' => TNXL_Settings::get_api_token(),
             'features'  => TNXL_Settings::get_features(),
-            'commission_rules' => get_option('tnxl_commission_rules', array()),
+            'commission_rules' => $this->sanitize_commission_rules(get_option('tnxl_commission_rules', array())),
             'disabled_service_ids' => TNXL_Settings::get_disabled_service_ids(),
             'shipping_ineligible_product_ids' => TNXL_Settings::get_ineligible_product_ids(),
+            'product_weight_unit' => TNXL_Settings::get_product_weight_unit(),
+            'charge_actual_weight_only' => TNXL_Settings::is_actual_weight_only(),
+            'service_coverage' => TNXL_Settings::get_service_coverage(),
+            'pricing_mode' => TNXL_Settings::get_pricing_mode(),
             'currency_symbol' => $currency_symbol,
             'shipper'   => array(
                 'name'        => get_option('tnxl_shipper_name', ''),
@@ -179,23 +195,21 @@ class TNXL_REST_API {
             TNXL_Settings::save_ineligible_product_ids($params['shipping_ineligible_product_ids']);
         }
 
+        if (array_key_exists('product_weight_unit', $params)) {
+            TNXL_Settings::save_product_weight_unit($params['product_weight_unit']);
+        }
+        if (array_key_exists('charge_actual_weight_only', $params)) {
+            TNXL_Settings::save_actual_weight_only($params['charge_actual_weight_only']);
+        }
+        if (isset($params['service_coverage']) && is_array($params['service_coverage'])) {
+            TNXL_Settings::save_service_coverage($params['service_coverage']);
+        }
+        if (array_key_exists('pricing_mode', $params)) {
+            TNXL_Settings::save_pricing_mode($params['pricing_mode']);
+        }
+
         if (isset($params['commission_rules'])) {
-            // Need custom sanitization for an array of rules
-            $rules = array();
-            if (is_array($params['commission_rules'])) {
-                foreach ($params['commission_rules'] as $rule) {
-                    $rules[] = array(
-                        'condition_type'    => sanitize_text_field($rule['condition_type'] ?? ''),
-                        'min_range'         => floatval($rule['min_range'] ?? 0),
-                        'max_range'         => floatval($rule['max_range'] ?? 0),
-                        'specific_products' => array_map('intval', (array)($rule['specific_products'] ?? array())),
-                        'fee_type'          => sanitize_text_field($rule['fee_type'] ?? 'fixed'),
-                        'fee_value'         => floatval($rule['fee_value'] ?? 0),
-                        'fee_label'         => sanitize_text_field($rule['fee_label'] ?? ''),
-                    );
-                }
-            }
-            update_option('tnxl_commission_rules', $rules);
+            update_option('tnxl_commission_rules', $this->sanitize_commission_rules($params['commission_rules']));
         }
 
         return rest_ensure_response(array('success' => true));
@@ -319,6 +333,193 @@ class TNXL_REST_API {
         }
 
         return rest_ensure_response($result);
+    }
+
+    public function get_product_catalog($request) {
+        $search = sanitize_text_field((string) $request->get_param('search'));
+        $args = array(
+            'post_type'      => 'product',
+            'post_status'    => 'publish',
+            'posts_per_page' => 25,
+            's'              => $search,
+            'orderby'        => 'title',
+            'order'          => 'ASC',
+        );
+        $query = new WP_Query($args);
+        $products = array();
+        foreach ($query->posts as $post) {
+            $product = wc_get_product($post->ID);
+            if (!$product) {
+                continue;
+            }
+            $m = TNXL_Product::get_shipping_measurements($product);
+            $customs = TNXL_Product::get_customs_details($product);
+            $products[] = array(
+                'id'                 => $product->get_id(),
+                'name'               => $product->get_name(),
+                'sku'                => $product->get_sku(),
+                'length'             => $m['length'],
+                'width'              => $m['width'],
+                'height'             => $m['height'],
+                'weight'             => $m['weight'],
+                'hs_code'            => $customs['hs_code'],
+                'country_of_origin'  => $customs['country_of_origin'],
+                'is_document'        => TNXL_Product::is_document($product),
+                'is_boxed_product'   => TNXL_Product::is_boxed_product($product),
+                'shipping_eligible'  => TNXL_Product::is_shipping_eligible($product),
+                'edit_url'           => get_edit_post_link($product->get_id(), 'raw'),
+            );
+        }
+
+        return rest_ensure_response($products);
+    }
+
+    public function update_product($request) {
+        $id = (int) $request['id'];
+        $product = wc_get_product($id);
+        if (!$product) {
+            return new WP_Error('tnxl_product_missing', 'Product not found.', array('status' => 404));
+        }
+
+        $params = $request->get_json_params();
+        if (!is_array($params)) {
+            $params = array();
+        }
+
+        if (isset($params['length']) || isset($params['width']) || isset($params['height'])) {
+            $dim_unit = (string) get_option('woocommerce_dimension_unit', 'cm');
+            if (isset($params['length'])) {
+                $product->set_length(wc_get_dimension((float) $params['length'], $dim_unit, 'cm'));
+            }
+            if (isset($params['width'])) {
+                $product->set_width(wc_get_dimension((float) $params['width'], $dim_unit, 'cm'));
+            }
+            if (isset($params['height'])) {
+                $product->set_height(wc_get_dimension((float) $params['height'], $dim_unit, 'cm'));
+            }
+        }
+        if (isset($params['weight'])) {
+            $weight_unit = (string) get_option('woocommerce_weight_unit', 'kg');
+            $product->set_weight(wc_get_weight((float) $params['weight'], $weight_unit, 'kg'));
+        }
+        $product->save();
+
+        if (array_key_exists('is_document', $params)) {
+            update_post_meta($id, '_tnxl_is_document', !empty($params['is_document']) ? 'yes' : 'no');
+        }
+        if (array_key_exists('is_boxed_product', $params)) {
+            update_post_meta($id, '_tnxl_is_boxed_product', !empty($params['is_boxed_product']) ? 'yes' : 'no');
+        }
+        if (array_key_exists('shipping_eligible', $params)) {
+            update_post_meta(
+                $id,
+                '_tnxl_shipping_eligible',
+                $params['shipping_eligible'] === false ? 'no' : 'yes'
+            );
+        }
+        if (array_key_exists('hs_code', $params)) {
+            update_post_meta($id, '_tnxl_hs_code', TNXL_Product::normalize_hs_code($params['hs_code']));
+        }
+        if (array_key_exists('country_of_origin', $params)) {
+            $origin = strtoupper(preg_replace('/[^A-Za-z]/', '', sanitize_text_field((string) $params['country_of_origin'])));
+            update_post_meta($id, '_tnxl_country_of_origin', substr($origin, 0, 2));
+        }
+
+        $fresh = wc_get_product($id);
+        $m = TNXL_Product::get_shipping_measurements($fresh);
+        $customs = TNXL_Product::get_customs_details($fresh);
+        return rest_ensure_response(array(
+            'id'                => $fresh->get_id(),
+            'name'              => $fresh->get_name(),
+            'sku'               => $fresh->get_sku(),
+            'length'            => $m['length'],
+            'width'             => $m['width'],
+            'height'            => $m['height'],
+            'weight'            => $m['weight'],
+            'hs_code'           => $customs['hs_code'],
+            'country_of_origin' => $customs['country_of_origin'],
+            'is_document'       => TNXL_Product::is_document($fresh),
+            'is_boxed_product'  => TNXL_Product::is_boxed_product($fresh),
+            'shipping_eligible' => TNXL_Product::is_shipping_eligible($fresh),
+            'edit_url'          => get_edit_post_link($fresh->get_id(), 'raw'),
+        ));
+    }
+
+    /**
+     * @param mixed $rules
+     * @return array<int, array<string, mixed>>
+     */
+    private function sanitize_commission_rules($rules): array {
+        if (!is_array($rules)) {
+            return array();
+        }
+        $out = array();
+        foreach ($rules as $index => $rule) {
+            if (!is_array($rule)) {
+                continue;
+            }
+            $conditions = array();
+            foreach ((array) ($rule['conditions'] ?? array()) as $condition) {
+                if (!is_array($condition)) {
+                    continue;
+                }
+                $type = sanitize_key((string) ($condition['type'] ?? ''));
+                $row = array('type' => $type);
+                if ($type === 'subtotal_range') {
+                    $row['minRange'] = floatval($condition['minRange'] ?? $condition['min_range'] ?? 0);
+                    $row['maxRange'] = floatval($condition['maxRange'] ?? $condition['max_range'] ?? 0);
+                } elseif ($type === 'specific_products') {
+                    $row['specificProducts'] = array_values(array_filter(array_map('absint', (array) ($condition['specificProducts'] ?? $condition['specific_products'] ?? array()))));
+                } elseif ($type === 'destination_country') {
+                    $codes = array();
+                    foreach ((array) ($condition['countries'] ?? array()) as $code) {
+                        $iso = strtoupper(preg_replace('/[^A-Za-z]/', '', (string) $code));
+                        if (strlen($iso) === 2) {
+                            $codes[] = $iso;
+                        }
+                    }
+                    $row['countries'] = array_values(array_unique($codes));
+                    $row['excludeCountries'] = !empty($condition['excludeCountries']) || !empty($condition['exclude_countries']);
+                } elseif ($type === 'weight_range') {
+                    $row['minKg'] = floatval($condition['minKg'] ?? 0);
+                    $row['maxKg'] = floatval($condition['maxKg'] ?? 0);
+                } elseif ($type === 'item_quantity') {
+                    $row['minQuantity'] = absint($condition['minQuantity'] ?? 0);
+                    $row['maxQuantity'] = absint($condition['maxQuantity'] ?? 0);
+                } elseif ($type === 'shipping_service') {
+                    $ids = array();
+                    foreach ((array) ($condition['serviceIds'] ?? $condition['service_ids'] ?? array()) as $id) {
+                        $norm = TNXL_Settings::normalize_service_id($id);
+                        if ($norm !== '') {
+                            $ids[] = $norm;
+                        }
+                    }
+                    $row['serviceIds'] = array_values(array_unique($ids));
+                } else {
+                    continue;
+                }
+                $conditions[] = $row;
+            }
+
+            $id = sanitize_text_field((string) ($rule['id'] ?? ('rule_' . ($index + 1))));
+            $out[] = array(
+                'id'                => $id !== '' ? $id : ('rule_' . ($index + 1)),
+                'conditionType'     => sanitize_text_field((string) ($rule['conditionType'] ?? $rule['condition_type'] ?? 'subtotal_range')),
+                'minRange'          => floatval($rule['minRange'] ?? $rule['min_range'] ?? 0),
+                'maxRange'          => floatval($rule['maxRange'] ?? $rule['max_range'] ?? 0),
+                'specificProducts'  => array_values(array_filter(array_map('absint', (array) ($rule['specificProducts'] ?? $rule['specific_products'] ?? array())))),
+                'conditions'        => $conditions,
+                'feeType'           => sanitize_text_field((string) ($rule['feeType'] ?? $rule['fee_type'] ?? 'fixed')),
+                'feeValue'          => floatval($rule['feeValue'] ?? $rule['fee_value'] ?? 0),
+                'markupPercent'     => floatval($rule['markupPercent'] ?? $rule['markup_percent'] ?? 0),
+                'cartPercent'       => floatval($rule['cartPercent'] ?? $rule['cart_percent'] ?? 0),
+                'pickupUnit'        => sanitize_text_field((string) ($rule['pickupUnit'] ?? $rule['pickup_unit'] ?? 'once')),
+                'stopProcessing'    => !empty($rule['stopProcessing']) || !empty($rule['stop_processing']),
+                'feeLabel'          => sanitize_text_field((string) ($rule['feeLabel'] ?? $rule['fee_label'] ?? '')),
+            );
+        }
+
+        return $out;
     }
 
     public function search_products($request) {

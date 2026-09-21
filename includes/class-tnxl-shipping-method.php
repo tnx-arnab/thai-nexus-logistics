@@ -121,6 +121,9 @@ class TNXL_Shipping_Method extends WC_Shipping_Method {
         }
 
         // 3D Box Packing Implementation
+        if (!class_exists('TNXL_Box_Packer')) {
+            return;
+        }
         $packer = TNXL_Box_Packer::get_instance();
         $packing_result = $packer->pack_items($tnxl_items);
 
@@ -152,12 +155,8 @@ class TNXL_Shipping_Method extends WC_Shipping_Method {
         }
 
         $commission = 0;
-        if (class_exists('TNXL_Commission')) {
-            $commission = TNXL_Commission::get_instance()->get_total_commission();
-        }
+        $commission_class = class_exists('TNXL_Commission');
 
-        // Quote each unique parcel shape once. Repeated retail boxes would
-        // otherwise trigger one sequential HTTP request per cart quantity.
         $quote_groups = array();
         foreach ($packed_boxes as $box) {
             $signature = md5(wp_json_encode(array(
@@ -230,38 +229,75 @@ class TNXL_Shipping_Method extends WC_Shipping_Method {
             }
         }
 
-        // Only show couriers that could quote ALL boxes
         $box_count = count($packed_boxes);
         $final_quotes_debug = array();
         $disabled_service_ids = TNXL_Settings::get_disabled_service_ids();
+        $coverage = TNXL_Settings::get_service_coverage();
+        $packed_weight = 0;
+        foreach ($packed_boxes as $box) {
+            $packed_weight += (float) ($box['weight'] ?? 0);
+        }
+        $pricing_context = $commission_class
+            ? TNXL_Commission::cart_pricing_context(array(
+                'destinationCountry' => (string) ($dest['country'] ?? ''),
+                'cartWeightKg'       => $packed_weight,
+            ))
+            : array();
 
+        $offered = array();
         foreach ($all_quotes as $courier => $data) {
             if ($data['count'] < $box_count) continue;
-            if (in_array(TNXL_Settings::normalize_service_id($courier), $disabled_service_ids, true)) {
-                continue;
-            }
+            $offered[] = array(
+                'courier'      => $courier,
+                'display_name' => $data['display_name'],
+                'estimated_days' => $data['estimated_days'],
+                'total_price'  => $data['total_price'],
+            );
+        }
 
-            $cost = $data['total_price'];
+        $offered = TNXL_Service_Coverage::filter_checkout_quotes(
+            $offered,
+            static function ($quote) {
+                return array($quote['courier'], $quote['display_name']);
+            },
+            (string) ($dest['country'] ?? ''),
+            $disabled_service_ids,
+            $coverage
+        );
+
+        foreach ($offered as $row) {
+            $cost_thb = (float) $row['total_price'];
+            $quote_store = $cost_thb;
             if ($has_rate) {
-                $cost = $cost * (float) $rate;
+                $quote_store = $cost_thb * (float) $rate;
             }
+            $priced = $quote_store;
+            $commission = 0.0;
+            if ($commission_class) {
+                $service_ids = TNXL_Service_Coverage::coverage_ids(array($row['courier'], $row['display_name']));
+                $priced_row = TNXL_Commission::price_converted_quote(
+                    $cost_thb,
+                    $has_rate ? $rate : null,
+                    array_merge($pricing_context, array('serviceIds' => $service_ids))
+                );
+                $quote_store = $priced_row['quote_store'];
+                $priced = $priced_row['priced'];
+                $commission = $priced_row['commission'];
+            }
+            $cost = $priced;
 
-            // Add hidden commission buffer
-            $cost += $commission;
-
-            // Add destination hash to ID to force WooCommerce to refresh rates when address changes
-            $rate_id = 'tnxl_' . sanitize_title($courier) . '_' . substr(md5($dest['country'] . $dest['postcode']), 0, 6);
+            $rate_id = 'tnxl_' . sanitize_title($row['courier']) . '_' . substr(md5($dest['country'] . $dest['postcode']), 0, 6);
 
             $this->add_rate(array(
                 'id'    => $rate_id,
-                'label' => $data['display_name'] . ' (' . ($data['estimated_days'] ?: 'TBA') . ' days)',
+                'label' => $row['display_name'] . ' (' . ($row['estimated_days'] ?: 'TBA') . ' days)',
                 'cost'  => $cost,
                 'meta_data' => array(
-                    'tnxl_courier' => $courier,
-                    'tnxl_courier_display' => $data['display_name'],
+                    'tnxl_courier' => $row['courier'],
+                    'tnxl_courier_display' => $row['display_name'],
                     'tnxl_boxes'   => $packed_boxes,
                     'tnxl_breakdown' => array(
-                        'base_price' => $cost - $commission,
+                        'base_price' => $quote_store,
                         'commission' => $commission,
                         'total'      => $cost
                     )
@@ -270,10 +306,10 @@ class TNXL_Shipping_Method extends WC_Shipping_Method {
 
             if ($debug_enabled) {
                 $final_quotes_debug[] = array(
-                    'courier' => $data['display_name'],
-                    'price_thb' => $data['total_price'],
+                    'courier' => $row['display_name'],
+                    'price_thb' => $row['total_price'],
                     'final_cost' => $cost,
-                    'days' => $data['estimated_days'] ?: 'TBA',
+                    'days' => $row['estimated_days'] ?: 'TBA',
                 );
             }
         }
