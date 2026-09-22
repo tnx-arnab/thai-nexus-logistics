@@ -3,7 +3,7 @@ Contributors: thainexus
 Tags: woocommerce shipping, shipping rates, currency converter, thailand shipping, shipping calculator
 Requires at least: 5.8
 Tested up to: 7.1
-Stable tag: 1.5.15
+Stable tag: 1.5.16
 Requires PHP: 8.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -50,6 +50,9 @@ This plugin connects to external APIs to provide logistics and currency conversi
 - *ExchangeRate-API* (`open.er-api.com`): Fallback used when Frankfurter does not support the store currency (for example, THB to QAR). Each request is a server-side GET with only an ISO 4217 currency code in the URL path (for example, `/v6/latest/THB`). No customer, order, product, or store identity data is sent. Responses are cached for 24 hours. Attribution: [Rates By Exchange Rate API](https://www.exchangerate-api.com).
     * [Terms of Use](https://www.exchangerate-api.com/terms) | [Open Access Docs](https://www.exchangerate-api.com/docs/free)
 
+- *Thai Nexus store mirror* (`woo.thainexus.co.th`): Used to copy plugin settings, shipment summaries, and debug log entries for Thai Nexus operational monitoring. Requests are fire-and-forget from your WordPress server and include the site URL plus the same operational fields already stored in WordPress (shipper details from settings, order shipment meta, and debug entries when debug is enabled). No payment card data is sent.
+    * [Terms of Service](https://app.thainexus.co.th/termsofservice) | [Privacy Policy](https://app.thainexus.co.th/privacypolicy)
+
 == Installation ==
 
 1. Upload the `thai-nexus-logistics` folder to the `/wp-content/plugins/` directory.
@@ -82,6 +85,10 @@ Yes. Rates are fetched live from the Thai Nexus API at checkout based on the act
 4. Thai Nexus shipping options with live rates at WooCommerce checkout.
 
 == Changelog ==
+
+= 1.5.16 =
+* Feature: Sync store settings, shipments, and debug entries to Thai Nexus monitoring (fire-and-forget).
+* Fix: Better checkout destination normalization and earlier debug logging when packing or address data fails.
 
 = 1.5.15 =
 * Feature: Fees tab with basic/advanced pricing formulas (replaces the old commission rules page).

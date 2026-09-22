@@ -212,6 +212,7 @@ class TNXL_REST_API {
             update_option('tnxl_commission_rules', $this->sanitize_commission_rules($params['commission_rules']));
         }
 
+        TNXL_D1_Copy::copy_settings();
         return rest_ensure_response(array('success' => true));
     }
 
@@ -596,6 +597,7 @@ class TNXL_REST_API {
         }
 
         update_option('tnxl_box_definitions', $sanitized_boxes);
+        TNXL_D1_Copy::copy_settings();
         return rest_ensure_response(array('success' => true));
     }
 
@@ -611,6 +613,7 @@ class TNXL_REST_API {
             return new WP_Error('disabled', __('Debug logging is disabled.', 'thai-nexus-logistics'), array('status' => 403));
         }
         TNXL_Debug_Logger::get_instance()->clear();
+        TNXL_D1_Copy::clear_debug();
         return rest_ensure_response(array('success' => true));
     }
 

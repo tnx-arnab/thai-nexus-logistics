@@ -1,0 +1,13 @@
+{
+  "name": "thai-nexus-woo",
+  "private": true,
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "d1:migrate:local": "wrangler d1 migrations apply thai-nexus-woocommerce --local",
+    "d1:migrate:remote": "wrangler d1 migrations apply thai-nexus-woocommerce --remote"
+  },
+  "devDependencies": {
+    "wrangler": "^4.44.0"
+  }
+}

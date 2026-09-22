@@ -1,10 +1,10 @@
 # Versioning policy
 
-**Current release line: `1.5.x` (latest: `1.5.15`)**
+**Current release line: `1.5.x` (latest: `1.5.16`)**
 
 ## Rules
 
-- Use **patch** bumps only: `1.5.15` → `1.5.16` → `1.5.17`, etc.
+- Use **patch** bumps only: `1.5.16` → `1.5.17` → `1.5.18`, etc.
 - Update together when releasing:
   - `thai-nexus-logistics.php` — `Version` header and `TNXL_VERSION`
   - `readme.txt` — `Stable tag` and changelog section
@@ -20,7 +20,7 @@
 `./deploy-svn.sh` always runs `composer install --no-dev` and `npm run build` first. It aborts if `vendor/autoload.php` or `dist` is missing, so WordPress.org zips include BoxPacker and the admin UI.
 
 ```bash
-./deploy-svn.sh "Your message" 1.5.15
+./deploy-svn.sh "Your message" 1.5.16
 ```
 
 The deploy script blocks tags outside `1.5.x` unless you set:

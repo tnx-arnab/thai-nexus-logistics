@@ -91,6 +91,7 @@ rsync -a --delete \
   --exclude='admin/node_modules' \
   --exclude='deploy-svn.sh' \
   --exclude='VERSIONING.md' \
+  --exclude='cloudflare' \
   --exclude='*.png' \
   --exclude='assets/blueprints' \
   --exclude='.env' \
@@ -134,7 +135,7 @@ echo "Changes to commit:"
 svn status -q
 echo ""
 read -r -p "Commit to WordPress.org SVN? [y/N] " CONFIRM
-if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
+if [[ "$CONFIRM" =~ ^[Yy]$ ]] || [[ "${SVN_CONFIRM:-}" == "y" ]]; then
   svn ci -m "$MSG" --username "$SVN_USER"
   echo "Done."
 else

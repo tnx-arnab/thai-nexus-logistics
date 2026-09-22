@@ -70,13 +70,23 @@ class TNXL_Shipping_Method extends WC_Shipping_Method {
             TNXL_API::$last_debug_data = array(); // Reset
         }
 
-        $dest = $package['destination'] ?? array();
+        $dest = $this->normalize_destination($package['destination'] ?? array());
 
         if ($this->enabled === 'no') {
             return;
         }
 
         if (empty($dest['country'])) {
+            $this->maybe_log_debug(array(
+                'error'       => 'Destination country is missing from the checkout address.',
+                'messages'    => array('Destination country is missing from the checkout address.'),
+                'destination' => $dest,
+                'products'    => array(),
+                'boxes'       => array(),
+                'box_count'   => 0,
+                'api_calls'   => array(),
+                'final_quotes'=> array(),
+            ));
             return;
         }
 
@@ -129,6 +139,16 @@ class TNXL_Shipping_Method extends WC_Shipping_Method {
 
         if ($packing_result->has_errors()) {
             $this->maybe_add_packing_notices($packing_result->get_errors());
+            $this->maybe_log_debug(array(
+                'error'        => $packing_result->get_errors()[0] ?? 'Packing failed',
+                'messages'     => $packing_result->get_errors(),
+                'destination'  => $dest,
+                'products'     => $debug_products,
+                'boxes'        => array(),
+                'box_count'    => 0,
+                'api_calls'    => TNXL_API::$last_debug_data,
+                'final_quotes' => array(),
+            ));
             return;
         }
 
@@ -315,19 +335,54 @@ class TNXL_Shipping_Method extends WC_Shipping_Method {
         }
 
         // Save Debug Log
-        if ($debug_enabled) {
-            TNXL_Debug_Logger::get_instance()->log_entry(array(
-                'products'       => $debug_products,
-                'boxes'          => $packed_boxes,
-                'box_count'      => count($packed_boxes),
-                'api_calls'      => TNXL_API::$last_debug_data,
-                'destination'    => $dest,
-                'final_quotes'   => $final_quotes_debug,
-                'currency'       => $target_currency,
-                'exchange_rate'  => $rate,
-                'commission'     => $commission,
-            ));
+        $this->maybe_log_debug(array(
+            'products'       => $debug_products,
+            'boxes'          => $packed_boxes,
+            'box_count'      => count($packed_boxes),
+            'api_calls'      => TNXL_API::$last_debug_data,
+            'destination'    => $dest,
+            'final_quotes'   => $final_quotes_debug,
+            'currency'       => $target_currency,
+            'exchange_rate'  => $rate,
+            'commission'     => $commission,
+        ));
+    }
+
+    /**
+     * @param array<string, mixed> $dest
+     * @return array{country:string,state:string,postcode:string,city:string}
+     */
+    private function normalize_destination($dest) {
+        $raw = is_array($dest) ? $dest : array();
+        $country = strtoupper(trim((string) ($raw['country'] ?? '')));
+        if (strlen($country) !== 2) {
+            $country = '';
         }
+        $city = $this->sanitize_city($raw['city'] ?? '');
+        return array(
+            'country'  => $country,
+            'state'    => (string) ($raw['state'] ?? ''),
+            'postcode' => (string) ($raw['postcode'] ?? $raw['post_code'] ?? ''),
+            'city'     => $city,
+        );
+    }
+
+    private function sanitize_city($value) {
+        $city = strtolower(trim(str_replace(array("\xE2\x80\x90", "\xE2\x80\x91", "\xE2\x80\x92", "\xE2\x80\x93", "\xE2\x80\x94", "\xE2\x80\x95"), '-', (string) $value)));
+        if ($city === '' || $city === '-' || $city === '--') {
+            return '';
+        }
+        if (str_contains($city, 'parent category') || str_contains($city, 'select a city') || str_contains($city, 'placeholder')) {
+            return '';
+        }
+        return trim((string) $value);
+    }
+
+    private function maybe_log_debug($data) {
+        if (!TNXL_Debug_Logger::is_enabled()) {
+            return;
+        }
+        TNXL_Debug_Logger::get_instance()->log_entry($data);
     }
 
     /**

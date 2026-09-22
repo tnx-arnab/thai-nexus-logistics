@@ -377,6 +377,7 @@ class TNXL_Order {
         }
 
         $order->save();
+        TNXL_D1_Copy::copy_shipment($order);
 
         TNXL_Tracking::maybe_notify_new_tracking($order);
 

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Thai Nexus Logistics - International Shipping Rates & Currency Converter for WooCommerce
  * Description: Real-time WooCommerce shipping rates, automated shipments, and multi-currency conversion for Thailand and international orders via the Thai Nexus API.
- * Version: 1.5.15
+ * Version: 1.5.16
  * Author: Thai Nexus
  * Author URI: https://app.thainexus.co.th
  * Text Domain: thai-nexus-logistics
@@ -16,7 +16,7 @@
 if (!defined('ABSPATH')) exit;
 
 // Release line: stay on 1.5.x (patch) until explicitly approved for 1.6+.
-define('TNXL_VERSION', '1.5.15');
+define('TNXL_VERSION', '1.5.16');
 define('TNXL_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('TNXL_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('TNXL_DEBUG', false);
@@ -123,6 +123,8 @@ class Thai_Nexus_Logistics {
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-api.php';
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-admin.php';
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-debug-logger.php';
+        require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-d1-copy.php';
+        TNXL_D1_Copy::init();
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-rest-api.php';
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-currency.php';
         require_once TNXL_PLUGIN_DIR . 'includes/class-tnxl-tracking.php';

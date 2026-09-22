@@ -185,6 +185,14 @@ class TNXL_Box_Packer {
         try {
             $packer = new Packer();
             $box_objs = [];
+            usort($box_definitions, static function ($a, $b) {
+                $va = ((float) ($a['inner_length'] ?? 0)) * ((float) ($a['inner_width'] ?? 0)) * ((float) ($a['inner_depth'] ?? 0));
+                $vb = ((float) ($b['inner_length'] ?? 0)) * ((float) ($b['inner_width'] ?? 0)) * ((float) ($b['inner_depth'] ?? 0));
+                if ($va === $vb) {
+                    return ((float) ($a['max_weight'] ?? 0)) <=> ((float) ($b['max_weight'] ?? 0));
+                }
+                return $va <=> $vb;
+            });
             foreach ($box_definitions as $box_data) {
                 $box_objs[] = new TNXL_Box($box_data);
                 $packer->addBox($box_objs[count($box_objs)-1]);
@@ -232,9 +240,9 @@ class TNXL_Box_Packer {
 
                 $result->add_box([
                     'name'   => $box_type->getReference(),
-                    'length' => (float) $box_type->getOuterLength() / 10,
-                    'width'  => (float) $box_type->getOuterWidth() / 10,
-                    'height' => (float) $box_type->getOuterDepth() / 10,
+                    'length' => (float) $box_type->getInnerLength() / 10,
+                    'width'  => (float) $box_type->getInnerWidth() / 10,
+                    'height' => (float) $box_type->getInnerDepth() / 10,
                     'weight' => (float) $packed_box->getWeight() / 1000,
                     'items'  => $box_items,
                 ]);

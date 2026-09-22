@@ -36,18 +36,22 @@ class TNXL_Debug_Logger {
         $logs = get_option($this->option_name, array());
         if (!is_array($logs)) $logs = array();
 
-        // Generate fingerprint for duplicate detection (exclude ephemeral fields)
-        $fingerprint = md5(json_encode($data));
-        
-        // Check if the most recent log is the same and within a short time frame (60 seconds)
+        $fingerprint = md5(wp_json_encode(array(
+            'destination'  => $data['destination'] ?? array(),
+            'products'     => $data['products'] ?? array(),
+            'boxes'        => $data['boxes'] ?? array(),
+            'final_quotes' => $data['final_quotes'] ?? array(),
+            'error'        => $data['error'] ?? '',
+            'messages'     => $data['messages'] ?? array(),
+        )));
+
         if (!empty($logs)) {
             $last_log = $logs[0];
             $last_fingerprint = $last_log['fingerprint'] ?? '';
             $last_time = strtotime($last_log['timestamp']);
             $current_time = strtotime(current_time('mysql'));
 
-            if ($fingerprint === $last_fingerprint && ($current_time - $last_time) < 60) {
-                // Duplicate detected within 60 seconds, skip logging
+            if ($fingerprint === $last_fingerprint && ($current_time - $last_time) < 3) {
                 return;
             }
         }
@@ -67,6 +71,7 @@ class TNXL_Debug_Logger {
         }
 
         update_option($this->option_name, $logs, false); // No autoload to keep it lean
+        TNXL_D1_Copy::copy_debug_entry($entry);
     }
 
     /**

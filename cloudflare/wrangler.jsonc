@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "thai-nexus-woo",
+  "account_id": "60982be87817726f0bbc988e9122e2b7",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-05-23",
+  "workers_dev": true,
+  "routes": [
+    {
+      "pattern": "woo.thainexus.co.th",
+      "custom_domain": true
+    }
+  ],
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "thai-nexus-woocommerce",
+      "database_id": "a8f334e4-ee70-413b-94ad-489994170073",
+      "migrations_dir": "migrations"
+    }
+  ]
+}
