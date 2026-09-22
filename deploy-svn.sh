@@ -134,8 +134,11 @@ echo ""
 echo "Changes to commit:"
 svn status -q
 echo ""
-read -r -p "Commit to WordPress.org SVN? [y/N] " CONFIRM
-if [[ "$CONFIRM" =~ ^[Yy]$ ]] || [[ "${SVN_CONFIRM:-}" == "y" ]]; then
+CONFIRM="${SVN_CONFIRM:-}"
+if [[ -z "$CONFIRM" ]]; then
+  read -r -p "Commit to WordPress.org SVN? [y/N] " CONFIRM || CONFIRM="n"
+fi
+if [[ "$CONFIRM" =~ ^[Yy]$ ]]; then
   svn ci -m "$MSG" --username "$SVN_USER"
   echo "Done."
 else
