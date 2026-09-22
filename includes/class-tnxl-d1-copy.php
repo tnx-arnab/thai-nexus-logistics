@@ -82,10 +82,61 @@ class TNXL_D1_Copy {
         ));
     }
 
+    /**
+     * Selected checkout shipping on an order (not quoted alternatives).
+     *
+     * @return array{shipping_amount: float|null, shipping_currency: string|null, selected_courier: string|null, selected_courier_title: string|null}
+     */
+    public static function selected_shipping_from_order($order): array {
+        $amount = null;
+        $currency = null;
+        $courier = null;
+        $title = null;
+
+        if (is_object($order) && method_exists($order, 'get_shipping_total')) {
+            $raw = (float) $order->get_shipping_total();
+            if ($raw > 0) {
+                $amount = round($raw, 2);
+            }
+        }
+        if (is_object($order) && method_exists($order, 'get_currency')) {
+            $code = trim((string) $order->get_currency());
+            $currency = $code !== '' ? $code : null;
+        }
+        if (is_object($order) && method_exists($order, 'get_shipping_methods')) {
+            foreach ($order->get_shipping_methods() as $method) {
+                $id = '';
+                $name = '';
+                if (is_object($method) && method_exists($method, 'get_meta')) {
+                    $id = trim((string) $method->get_meta('tnxl_courier'));
+                    $name = trim((string) $method->get_meta('tnxl_courier_display'));
+                }
+                if ($name === '' && is_object($method) && method_exists($method, 'get_method_title')) {
+                    $raw_title = (string) $method->get_method_title();
+                    $name = trim((string) preg_replace('/\s*\([^)]*days?\)\s*$/i', '', $raw_title));
+                }
+                if ($id !== '' || $name !== '') {
+                    $courier = $id !== '' ? $id : $name;
+                    $title = $name !== '' ? $name : $id;
+                    break;
+                }
+            }
+        }
+
+        return array(
+            'shipping_amount' => $amount,
+            'shipping_currency' => $currency,
+            'selected_courier' => $courier,
+            'selected_courier_title' => $title,
+        );
+    }
+
     public static function copy_shipment($order): void {
         if (!$order || !is_object($order) || !method_exists($order, 'get_id')) {
             return;
         }
+
+        $selected = self::selected_shipping_from_order($order);
 
         self::post('shipment', array(
             'order_id' => (string) $order->get_id(),
@@ -95,6 +146,10 @@ class TNXL_D1_Copy {
             'expected_box_count' => absint($order->get_meta('_tnxl_expected_box_count')),
             'shipments' => $order->get_meta('_tnxl_all_shipments'),
             'errors' => $order->get_meta('_tnxl_shipment_errors'),
+            'shipping_amount' => $selected['shipping_amount'],
+            'shipping_currency' => $selected['shipping_currency'],
+            'selected_courier' => $selected['selected_courier'],
+            'selected_courier_title' => $selected['selected_courier_title'],
         ));
     }
 
